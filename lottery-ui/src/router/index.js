@@ -25,6 +25,11 @@ const routes = [
     path: '/predict',
     component: () => import('@/views/predict/index.vue'),
     meta: { title: '预测结果' }
+  },
+  {
+  path: '/analysis',
+  component: () => import('@/views/analysis/index.vue'),
+  meta: { title: '预测分析' }
   }
 ]
 

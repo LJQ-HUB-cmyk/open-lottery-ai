@@ -21,7 +21,6 @@ class SSQHistoryResponse(BaseModel):
     blue_one: int
     red_summation: Optional[int] = None
     red_span: Optional[int] = None
-    # 其他字段可根据需要添加
 
     class Config:
         from_attributes = True
@@ -52,6 +51,7 @@ class TrainRequest(BaseModel):
     batch_size: int = 32
     seq_len: int = 30
     learning_rate: float = 1e-4
+    with_fetch: bool = True
 
 class TrainResponse(BaseModel):
     """训练任务响应"""
@@ -64,12 +64,13 @@ class PredictRequest(BaseModel):
     """预测请求"""
     lottery_type: str = "ssq"
     model_version: Optional[str] = "latest"
+    model_name: Optional[str] = None   # 新增：指定具体模型文件名（如 ssq_epochs50_bs32_seq30_lr0_0001_1234567890.pt）
 
 class PredictResponse(BaseModel):
     """预测响应"""
     lottery_type: str
     forecast_date: date
-    red: List[int]          # 红球列表（双色球6个，大乐透5个）
-    blue: List[int]         # 蓝球列表（双色球1个，大乐透2个）
+    red: List[int]
+    blue: List[int]
     quality_score: Optional[float] = None
     model_version: str = "Transformer"

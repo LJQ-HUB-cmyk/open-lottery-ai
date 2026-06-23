@@ -11,10 +11,22 @@
         active-text-color="#fff"
         class="pc-menu"
       >
-        <el-menu-item index="/dashboard">首页</el-menu-item>
-        <el-menu-item index="/data">数据管理</el-menu-item>
-        <el-menu-item index="/train">模型训练</el-menu-item>
-        <el-menu-item index="/predict">预测结果</el-menu-item>
+        <el-menu-item index="/dashboard">
+          <el-icon><House /></el-icon>
+          <span>首页</span>
+        </el-menu-item>
+        <el-menu-item index="/data">
+          <el-icon><DataBoard /></el-icon>
+          <span>数据管理</span>
+        </el-menu-item>
+        <el-menu-item index="/train">
+          <el-icon><Cpu /></el-icon>
+          <span>模型训练</span>
+        </el-menu-item>
+        <el-menu-item index="/predict">
+          <el-icon><TrendCharts /></el-icon>
+          <span>预测结果</span>
+        </el-menu-item>
       </el-menu>
 
       <!-- 移动端汉堡菜单按钮 -->
@@ -31,10 +43,26 @@
           active-text-color="#409EFF"
           @select="drawer = false"
         >
-          <el-menu-item index="/dashboard">首页</el-menu-item>
-          <el-menu-item index="/data">数据管理</el-menu-item>
-          <el-menu-item index="/train">模型训练</el-menu-item>
-          <el-menu-item index="/predict">预测结果</el-menu-item>
+          <el-menu-item index="/dashboard">
+            <el-icon><House /></el-icon>
+            <span>首页</span>
+          </el-menu-item>
+          <el-menu-item index="/data">
+            <el-icon><DataBoard /></el-icon>
+            <span>数据管理</span>
+          </el-menu-item>
+          <el-menu-item index="/train">
+            <el-icon><Cpu /></el-icon>
+            <span>模型训练</span>
+          </el-menu-item>
+          <el-menu-item index="/predict">
+            <el-icon><TrendCharts /></el-icon>
+            <span>预测结果</span>
+          </el-menu-item>
+          <el-menu-item index="/analysis">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>预测分析</span>
+          </el-menu-item>
         </el-menu>
       </el-drawer>
     </el-header>
@@ -46,7 +74,14 @@
 
 <script setup>
 import { ref } from 'vue'
-import { Menu } from '@element-plus/icons-vue'
+import {
+  Menu,
+  House,
+  DataBoard,
+  Cpu,
+  TrendCharts,
+  DataAnalysis
+} from '@element-plus/icons-vue'
 
 const drawer = ref(false)
 </script>
@@ -74,6 +109,9 @@ const drawer = ref(false)
 .pc-menu .el-menu-item {
   color: white !important;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .pc-menu .el-menu-item.is-active {
   background: rgba(255, 255, 255, 0.2) !important;
@@ -89,6 +127,12 @@ const drawer = ref(false)
   padding: 20px;
   background: #f5f7fa;
   min-height: calc(100vh - 60px);
+}
+/* 移动端菜单项样式 */
+.el-drawer .el-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* 响应式：小屏隐藏水平菜单，显示汉堡按钮 */

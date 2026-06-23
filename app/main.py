@@ -4,7 +4,7 @@ FastAPI 应用入口，注册路由、中间件和生命周期事件。
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health, data, train, predict, models
+from app.api.routes import health, data, train, predict, models, analysis  # 添加 analysis
 from app.core.database import engine, Base
 
 app = FastAPI(
@@ -28,6 +28,7 @@ app.include_router(data.router)
 app.include_router(train.router)
 app.include_router(predict.router)
 app.include_router(models.router)
+app.include_router(analysis.router)  # 新增分析路由
 
 @app.on_event("startup")
 async def startup_event():

@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from celery.result import AsyncResult
 from app.schemas.lottery import TrainRequest, TrainResponse
-from app.tasks.training_jobs import start_training
+from app.tasks.training_jobs import start_training, run_full_pipeline   # 新增导入 run_full_pipeline
 from app.core.celery_app import celery_app
 
 router = APIRouter(prefix="/train", tags=["Training"])
@@ -15,18 +15,33 @@ async def start_train(request: TrainRequest):
     """
     启动异步训练任务。
     提交后立即返回 task_id，用于后续查询进度。
+    若 with_fetch=True，则先执行数据抓取再训练。
     """
-    task = start_training.delay(
-        lottery_type=request.lottery_type,
-        epochs=request.epochs,
-        batch_size=request.batch_size,
-        seq_len=request.seq_len,
-        learning_rate=request.learning_rate
-    )
+    if request.with_fetch:
+        # 完整流水线：抓取 + 训练
+        task = run_full_pipeline.delay(
+            lottery_type=request.lottery_type,
+            epochs=request.epochs,
+            batch_size=request.batch_size,
+            seq_len=request.seq_len,
+            learning_rate=request.learning_rate
+        )
+        message = "完整训练任务已提交（先抓取数据再训练）"
+    else:
+        # 仅训练
+        task = start_training.delay(
+            lottery_type=request.lottery_type,
+            epochs=request.epochs,
+            batch_size=request.batch_size,
+            seq_len=request.seq_len,
+            learning_rate=request.learning_rate
+        )
+        message = "训练任务已提交"
+
     return TrainResponse(
         task_id=task.id,
         status="pending",
-        message="训练任务已提交，请使用 task_id 查询状态"
+        message=message
     )
 
 @router.get("/status/{task_id}")

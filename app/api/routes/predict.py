@@ -18,7 +18,8 @@ async def predict(request: PredictRequest):
     try:
         result = await get_prediction(
             lottery_type=request.lottery_type,
-            model_version=request.model_version
+            model_version=request.model_version,
+            model_name=request.model_name   # 新增传递
         )
         return PredictResponse(
             lottery_type=request.lottery_type,

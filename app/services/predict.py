@@ -1,33 +1,37 @@
-import torch
-import numpy as np
-from .transformer_model import LotteryTransformer
-from .data_loader import load_lottery_data
-from app.core.database import AsyncSessionLocal
+# -*- coding: utf-8 -*-
+"""
+预测接口：基于已训练模型生成预测结果。
+"""
+from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+from app.schemas.lottery import PredictRequest, PredictResponse
+from app.services.predictor import get_prediction
 
+router = APIRouter(prefix="/predict", tags=["Prediction"])
 
-async def predict_next(lottery_type: str, seq_len: int = 30):
-    """预测下一期开奖号码"""
-    async with AsyncSessionLocal() as db:
-        data = await load_lottery_data(lottery_type, db)
-
-    # 加载模型
-    model = LotteryTransformer(input_dim=data.shape[1])
-    model.load_state_dict(torch.load(f"./models_storage/{lottery_type}_final.pt"))
-    model.eval()
-
-    # 获取最近 seq_len 期数据
-    recent = data.values[-seq_len:]
-    input_tensor = torch.tensor(recent, dtype=torch.float32).unsqueeze(0)  # (1, seq_len, features)
-
-    with torch.no_grad():
-        prediction = model(input_tensor)
-
-    # 后处理：将预测值转换为整数（红球1-33，蓝球1-16）
-    pred = prediction.squeeze().numpy()
-    reds = np.clip(np.round(pred[:6]), 1, 33).astype(int)
-    blue = np.clip(np.round(pred[6]), 1, 16).astype(int)
-
-    return {
-        "red": sorted(reds.tolist()),
-        "blue": int(blue)
-    }
+@router.post("/", response_model=PredictResponse)
+async def predict(request: PredictRequest):
+    """
+    根据彩种和模型版本生成预测号码。
+    自动将预测结果保存到对应的 forecast 表中。
+    """
+    try:
+        result = await get_prediction(
+            lottery_type=request.lottery_type,
+            model_version=request.model_version,
+            model_name=request.model_name
+        )
+        return PredictResponse(
+            lottery_type=request.lottery_type,
+            forecast_date=date.today(),
+            red=result["red"],
+            blue=result["blue"],
+            quality_score=result.get("quality_score"),
+            model_version=result.get("model_version", "Transformer")
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"预测失败: {str(e)}")

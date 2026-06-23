@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 预测服务：加载已训练模型和标准化器，生成预测结果并存入数据库。
-修正版：正确使用 StandardScaler 进行逆标准化。
+逻辑：同一天同一模型只保留一条预测记录（存在则更新），不同模型可有多条。
+支持指定模型文件进行预测。
 """
 import torch
 import joblib
 import numpy as np
 from datetime import date
+from sqlalchemy import select
 from .data_loader import load_ssq_data, load_dlt_data
 from .transformer_model import LotteryTransformer
 from app.core.config import settings
@@ -17,27 +19,36 @@ import os
 import random
 
 
-async def get_prediction(lottery_type, model_version="latest"):
+async def get_prediction(lottery_type, model_version="latest", model_name=None):
     """
     根据彩种生成预测，并保存到对应的预测表中。
-
-    Args:
-        lottery_type (str): 'ssq' 或 'dlt'
-        model_version (str): 模型版本标识
-
-    Returns:
-        dict: 包含 red (list), blue (list), quality_score, model_version
+    同一天同一模型只保留一条记录（存在则更新），不同模型可有多条。
+    可指定具体模型文件名进行预测。
     """
     save_dir = settings.MODEL_SAVE_DIR
-    model_path = os.path.join(save_dir, f"{lottery_type}_final.pt")
-    scaler_path = os.path.join(save_dir, f"{lottery_type}_scaler.joblib")
+
+    # 确定模型文件路径
+    if model_name:
+        if not model_name.endswith('.pt'):
+            model_name = model_name + '.pt'
+        model_path = os.path.join(save_dir, model_name)
+        scaler_name = model_name.replace('.pt', '_scaler.joblib')
+        scaler_path = os.path.join(save_dir, scaler_name)
+        if not os.path.exists(scaler_path):
+            scaler_path = os.path.join(save_dir, f"{lottery_type}_scaler.joblib")
+    else:
+        model_path = os.path.join(save_dir, f"{lottery_type}_final.pt")
+        model_name = f"{lottery_type}_final.pt"
+        scaler_path = os.path.join(save_dir, f"{lottery_type}_scaler.joblib")
 
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"模型文件 {model_path} 不存在，请先训练模型")
+    if not os.path.exists(scaler_path):
+        raise FileNotFoundError(f"标准化器文件 {scaler_path} 不存在，请确保模型训练完整")
 
     # 加载标准化器和模型
     scaler = joblib.load(scaler_path)
-    input_dim = scaler.mean_.shape[0]  # 特征维度（包含特征 + 目标列）
+    input_dim = scaler.mean_.shape[0]
 
     # 加载最新数据
     if lottery_type == 'ssq':
@@ -64,54 +75,41 @@ async def get_prediction(lottery_type, model_version="latest"):
     scaled_seq = scaler.transform(last_seq)
     input_tensor = torch.tensor(scaled_seq, dtype=torch.float32).unsqueeze(0)
 
-    # 加载模型
-    output_dim = num_red + num_blue  # 双色球7，大乐透7
+    # 加载模型（增加 weights_only=False 避免警告，实际可以改为 True 但需要模型兼容）
+    output_dim = num_red + num_blue
     model = LotteryTransformer(input_dim=input_dim, output_dim=output_dim)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    model.load_state_dict(torch.load(model_path, map_location='cpu', weights_only=False))
     model.eval()
 
     with torch.no_grad():
-        pred_scaled = model(input_tensor).squeeze().numpy()  # (output_dim,)
+        pred_scaled = model(input_tensor).squeeze().numpy()
 
-    # ===== 关键修正：使用逆标准化还原号码 =====
-    # 需要构造一个完整的标准化向量，将预测值放回原始尺度
-    # 获取所有列的标准差和均值，构造一个完整向量
+    # 逆标准化还原号码
     all_means = scaler.mean_
     all_scales = scaler.scale_
-
-    # 获取目标列在原始数据中的索引（最后 output_dim 列）
     target_indices = list(range(input_dim - output_dim, input_dim))
 
-    # 构建完整向量（长度 = 特征维度 + 目标维度）
-    # 对于特征部分，我们使用最后一期的特征值，然后替换目标部分为预测值
-    last_row = last_seq[-1]  # 最后一期的完整向量（原始尺度）
-    # 标准化后的特征部分使用相同值，目标部分用预测值替换
-    # 但逆标准化时需要完整的标准化值，我们可以构建一个零向量，只填充预测值到目标位置
+    last_row = last_seq[-1]
     dummy_scaled = np.zeros(input_dim)
-    # 将预测值放到目标位置
     for i, idx in enumerate(target_indices):
         dummy_scaled[idx] = pred_scaled[i]
-    # 逆标准化
     pred_original = scaler.inverse_transform(dummy_scaled.reshape(1, -1)).flatten()
-    # 提取目标值（号码）
     pred_numbers = pred_original[target_indices]
 
-    # 将预测值映射到合法号码范围（取整 + 限界）
-    # 红球
+    # 将预测值映射到合法号码范围
     reds = []
     for i in range(num_red):
         val = int(round(pred_numbers[i]))
         val = max(1, min(red_upper, val))
         reds.append(val)
 
-    # 蓝球
     blues = []
     for i in range(num_blue):
         val = int(round(pred_numbers[num_red + i]))
         val = max(1, min(blue_upper, val))
         blues.append(val)
 
-    # 红球去重并补齐（如果模型产生了重复号码）
+    # 红球去重并补齐
     reds = sorted(set(reds))
     while len(reds) < num_red:
         candidates = [x for x in range(1, red_upper + 1) if x not in reds]
@@ -126,40 +124,91 @@ async def get_prediction(lottery_type, model_version="latest"):
             blues.append(random.choice(candidates))
         blues = sorted(blues)
     else:
-        blues = blues[:1]  # 只取第一个
+        blues = blues[:1]
 
-    # 质量评分（基于预测值的稳定性，可改进）
     quality_score = round(0.85 + random.uniform(-0.05, 0.05), 3)
 
-    # 保存预测结果到数据库
+    # ========== 判断当天该模型是否已有记录 ==========
+    today = date.today()
+    # model_name 已确定（如 ssq_epochs200_bs128_seq100_lr0_0001_1782232238.pt）
+
     async with AsyncSessionLocal() as db:
         if lottery_type == 'ssq':
-            forecast = SSQForecast(
-                forecast_date=date.today(),
-                group_id=1,
-                red_one=reds[0], red_two=reds[1], red_three=reds[2],
-                red_four=reds[3], red_five=reds[4], red_six=reds[5],
-                blue_one=blues[0],
-                model_version="Transformer",
-                quality_score=quality_score
+            # 查询当天该模型的预测记录
+            stmt = select(SSQForecast).where(
+                SSQForecast.forecast_date == today,
+                SSQForecast.model_version == model_name   # 利用 model_version 存储文件名
             )
-            db.add(forecast)
-        else:
-            forecast = DLTForecast(
-                forecast_date=date.today(),
-                group_id=1,
-                red_one=reds[0], red_two=reds[1], red_three=reds[2],
-                red_four=reds[3], red_five=reds[4],
-                blue_one=blues[0], blue_two=blues[1],
-                model_version="Transformer",
-                quality_score=quality_score
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # 存在则更新
+                existing.red_one = reds[0]
+                existing.red_two = reds[1]
+                existing.red_three = reds[2]
+                existing.red_four = reds[3]
+                existing.red_five = reds[4]
+                existing.red_six = reds[5]
+                existing.blue_one = blues[0]
+                existing.quality_score = quality_score
+                existing.model_version = model_name   # 保持文件名不变
+                await db.commit()
+                action = "更新"
+            else:
+                # 不存在则插入
+                forecast = SSQForecast(
+                    forecast_date=today,
+                    group_id=1,
+                    red_one=reds[0], red_two=reds[1], red_three=reds[2],
+                    red_four=reds[3], red_five=reds[4], red_six=reds[5],
+                    blue_one=blues[0],
+                    model_version=model_name,   # 存储模型文件名
+                    quality_score=quality_score
+                )
+                db.add(forecast)
+                await db.commit()
+                action = "插入"
+
+        else:  # dlt
+            stmt = select(DLTForecast).where(
+                DLTForecast.forecast_date == today,
+                DLTForecast.model_version == model_name
             )
-            db.add(forecast)
-        await db.commit()
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                existing.red_one = reds[0]
+                existing.red_two = reds[1]
+                existing.red_three = reds[2]
+                existing.red_four = reds[3]
+                existing.red_five = reds[4]
+                existing.blue_one = blues[0]
+                existing.blue_two = blues[1]
+                existing.quality_score = quality_score
+                existing.model_version = model_name
+                await db.commit()
+                action = "更新"
+            else:
+                forecast = DLTForecast(
+                    forecast_date=today,
+                    group_id=1,
+                    red_one=reds[0], red_two=reds[1], red_three=reds[2],
+                    red_four=reds[3], red_five=reds[4],
+                    blue_one=blues[0], blue_two=blues[1],
+                    model_version=model_name,
+                    quality_score=quality_score
+                )
+                db.add(forecast)
+                await db.commit()
+                action = "插入"
 
     return {
         "red": reds,
         "blue": blues,
         "quality_score": quality_score,
-        "model_version": "Transformer"
+        "model_version": model_name,      # 返回模型文件名
+        "action": action,
+        "model_name": model_name
     }

@@ -44,3 +44,9 @@ nbdist/
 !*/build/*.java
 !*/build/*.html
 !*/build/*.xml
+
+######################################################################
+# AI Models (训练生成的模型文件)
+/app/models_storage/
+*.pt
+*.joblib
