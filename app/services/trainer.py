@@ -101,8 +101,9 @@ def train_lottery_model(lottery_type, epochs=50, batch_size=32, seq_len=30, lr=1
 
     print("✅ 训练完成！")
 
-    # ---------- 6. 保存模型和标准化器 ----------
-    save_dir = settings.MODEL_SAVE_DIR
+    # ---------- 6. 保存模型和标准化器（按彩种分目录） ----------
+    base_dir = settings.MODEL_SAVE_DIR
+    save_dir = os.path.join(base_dir, lottery_type)
     os.makedirs(save_dir, exist_ok=True)
 
     import time

@@ -8,7 +8,7 @@
         <div class="card-header">
           <span>⚙️ 训练配置</span>
           <!-- 点击切换参数说明表格的显示/隐藏 -->
-          <el-button type="text" @click="showHelp = !showHelp" style="font-size:14px;">
+          <el-button link @click="showHelp = !showHelp" style="font-size:14px;">
             {{ showHelp ? '收起参数说明 ▲' : '展开参数说明 ▼' }}
           </el-button>
         </div>
@@ -31,8 +31,8 @@
         <!-- 彩种选择 -->
         <el-form-item label="彩种">
           <el-radio-group v-model="lotteryType">
-            <el-radio label="ssq">双色球</el-radio>
-            <el-radio label="dlt">大乐透</el-radio>
+            <el-radio value="ssq">双色球</el-radio>
+            <el-radio value="dlt">大乐透</el-radio>
           </el-radio-group>
         </el-form-item>
 

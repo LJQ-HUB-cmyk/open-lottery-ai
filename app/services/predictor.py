@@ -26,7 +26,9 @@ async def get_prediction(lottery_type, model_version="latest", model_name=None):
     同一开奖期同一模型只保留一条记录（存在则更新），不同模型可有多条。
     可指定具体模型文件名进行预测。
     """
-    save_dir = settings.MODEL_SAVE_DIR
+    # 按彩种获取对应的子目录
+    base_dir = settings.MODEL_SAVE_DIR
+    save_dir = os.path.join(base_dir, lottery_type)
 
     # 确定模型文件路径
     if model_name:

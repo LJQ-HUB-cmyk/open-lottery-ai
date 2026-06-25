@@ -6,40 +6,64 @@
         <!-- 彩种选择 -->
         <el-form-item label="彩种">
           <el-radio-group v-model="lotteryType" @change="onLotteryChange">
-            <el-radio label="ssq">双色球</el-radio>
-            <el-radio label="dlt">大乐透</el-radio>
+            <el-radio value="ssq">双色球</el-radio>
+            <el-radio value="dlt">大乐透</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <!-- 模型多选 + 搜索 + 全选 -->
         <el-form-item label="选择模型">
-          <el-select
-            v-model="selectedModels"
-            multiple
-            placeholder="输入模型名搜索，支持多选"
-            style="width:100%;"
-            filterable
-            collapse-tags
-            :disabled="modelOptions.length === 0"
-            @change="onModelChange"
-          >
-            <!-- 全选选项 -->
-            <el-option
-              key="__select_all__"
-              label="☑️ 全选"
-              value="__select_all__"
-              style="font-weight:bold;color:#409EFF;"
-            />
-            <!-- 模型选项 -->
-            <el-option
-              v-for="item in modelOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-          <div style="color:#909399;font-size:12px;margin-top:4px;">
-            共 {{ modelOptions.length }} 个模型，已选 {{ selectedModels.length }} 个
+          <div class="model-select-wrapper">
+            <el-select
+              v-model="selectedModels"
+              multiple
+              placeholder="输入模型名搜索，支持多选"
+              style="width:100%;"
+              filterable
+              collapse-tags
+              collapse-tags-tooltip
+              :disabled="modelOptions.length === 0"
+              @change="onModelChange"
+            >
+              <!-- 全选选项 -->
+              <el-option
+                key="__select_all__"
+                label="☑️ 全选"
+                value="__select_all__"
+                style="font-weight:bold;color:#409EFF;"
+              />
+              <!-- 模型选项 -->
+              <el-option
+                v-for="item in modelOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              >
+                <div class="model-option">
+                  <span class="model-option-label">{{ item.label }}</span>
+                  <el-tag size="small" type="info" round class="model-option-tag">.pt</el-tag>
+                </div>
+              </el-option>
+            </el-select>
+
+            <!-- 快捷操作 -->
+            <div class="model-select-actions">
+              <div class="model-stat">
+                <span class="stat-text">共 <strong>{{ modelOptions.length }}</strong> 个模型</span>
+                <span class="stat-divider">|</span>
+                <span class="stat-text">已选 <strong class="selected-count">{{ selectedModels.length }}</strong> 个</span>
+              </div>
+              <el-button
+                v-if="selectedModels.length > 0"
+                size="small"
+                type="danger"
+                plain
+                @click="clearAllSelection"
+                class="clear-btn"
+              >
+                <el-icon><Close /></el-icon> 清空已选
+              </el-button>
+            </div>
           </div>
         </el-form-item>
 
@@ -52,7 +76,7 @@
               :loading="loading"
               :disabled="!selectedModels.length"
             >
-              预测
+              {{ selectedModels.length > 0 ? `预测 (${selectedModels.length})` : '预测' }}
             </el-button>
             <el-button @click="handleClear">清空结果</el-button>
             <el-button @click="loadModels" :loading="loadingModels">刷新模型列表</el-button>
@@ -132,6 +156,7 @@ import { ref, onMounted, computed } from 'vue'
 import { listModels } from '@/api/model'
 import { getPrediction } from '@/api/predict'
 import { ElMessage } from 'element-plus'
+import { Close } from '@element-plus/icons-vue'
 
 // ----- 状态 -----
 const lotteryType = ref('ssq')
@@ -225,6 +250,12 @@ const onModelChange = (val) => {
     const cleanVal = selectedModels.value.filter(v => v !== '__select_all__')
     selectedModels.value = cleanVal
   }
+}
+
+// ----- 清空所有已选模型 -----
+const clearAllSelection = () => {
+  selectedModels.value = []
+  ElMessage.info('已清空所有选择')
 }
 
 // ----- 分批预测（每批最多 10 个） -----
@@ -321,6 +352,79 @@ onMounted(() => {
 .predict-form .el-form-item {
   margin-bottom: 18px;
 }
+
+/* ===== 模型选择区域 ===== */
+.model-select-wrapper {
+  width: 100%;
+}
+
+/* 模型选项自定义样式 */
+.model-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.model-option-label {
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #303133;
+}
+.model-option-tag {
+  font-size: 10px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* 快捷操作区域 */
+.model-select-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 统计信息 */
+.model-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #909399;
+}
+.stat-text {
+  color: #606266;
+}
+.stat-text strong {
+  color: #303133;
+}
+.stat-text .selected-count {
+  color: #409EFF;
+  font-weight: 700;
+  font-size: 15px;
+}
+.stat-divider {
+  color: #dcdfe6;
+  margin: 0 4px;
+}
+
+/* 清空按钮 */
+.clear-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  height: 28px;
+}
+.clear-btn .el-icon {
+  font-size: 14px;
+}
+
+/* 预测按钮带数量 */
+.btn-group .el-button--primary {
+  min-width: 120px;
+}
+
 .btn-group {
   display: flex;
   flex-wrap: wrap;
@@ -330,6 +434,8 @@ onMounted(() => {
   flex: 1 0 auto;
   min-width: 80px;
 }
+
+/* ===== 结果卡片 ===== */
 .result-card {
   margin-bottom: 20px;
   height: 100%;
@@ -360,6 +466,8 @@ onMounted(() => {
 .error-msg {
   padding: 10px 0;
 }
+
+/* ===== 响应式 ===== */
 @media (max-width: 768px) {
   .predict-form .el-form-item {
     margin-bottom: 14px;
@@ -371,6 +479,21 @@ onMounted(() => {
     font-size: 13px;
     padding: 0 10px;
     height: 28px;
+  }
+  .model-select-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .model-stat {
+    justify-content: center;
+    font-size: 12px;
+  }
+  .clear-btn {
+    align-self: center;
+  }
+  .btn-group .el-button--primary {
+    min-width: 80px;
   }
 }
 </style>

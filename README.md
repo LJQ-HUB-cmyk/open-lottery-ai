@@ -324,7 +324,7 @@ npm install --registry=https://registry.npmmirror.com
 # 10. 启动前端服务（终端3）
 start cmd /k "npm run dev"
 
-# 访问前端: http://localhost:5173
+# 访问前端: http://localhost:8888
 # API 文档: http://localhost:8000/docs
 # RabbitMQ 管理: http://localhost:15672 (guest/guest)
 
@@ -340,4 +340,7 @@ start cmd /k "npm run dev"
 <div align="center">
   <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery03.png" width="48%" />
   <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery04.png" width="48%"/>
+</div>
+<div align="center">
+  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery05.png" width="96%" />
 </div>

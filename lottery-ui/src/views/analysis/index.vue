@@ -42,8 +42,8 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <el-radio-group v-model="lotteryType" @change="fetchData" size="default">
-            <el-radio-button label="ssq">🟥 双色球</el-radio-button>
-            <el-radio-button label="dlt">🟧 大乐透</el-radio-button>
+            <el-radio-button value="ssq">🟥 双色球</el-radio-button>
+            <el-radio-button value="dlt">🟧 大乐透</el-radio-button>
           </el-radio-group>
         </div>
         <div class="toolbar-right">
@@ -338,7 +338,7 @@
         </el-empty>
       </div>
 
-      <!-- ---- 预测记录列表 ---- -->
+      <!-- ---- 预测记录列表（带分页） ---- -->
       <el-card v-if="forecasts.length > 0" class="list-card" shadow="hover">
         <template #header>
           <div class="list-header">
@@ -346,7 +346,16 @@
             <el-tag type="info" size="small" round>共 {{ forecasts.length }} 条</el-tag>
           </div>
         </template>
-        <el-table :data="forecasts" border stripe style="width:100%;" size="default">
+
+        <!-- 表格 -->
+        <el-table
+          :data="paginatedForecasts"
+          border
+          stripe
+          style="width:100%;"
+          size="default"
+          max-height="500"
+        >
           <el-table-column label="红球" min-width="280">
             <template #default="{ row }">
               <span v-for="r in row.red" :key="r" class="ball ball-red ball-small">
@@ -368,12 +377,31 @@
           </el-table-column>
           <el-table-column prop="quality_score" label="质量评分" width="160">
             <template #default="{ row }">
-              <el-progress :percentage="Math.round((row.quality_score || 0) * 100)" :color="getScoreColor(row.quality_score || 0)" :stroke-width="6" style="width:120px;display:inline-block;" />
+              <el-progress
+                :percentage="Math.round((row.quality_score || 0) * 100)"
+                :color="getScoreColor(row.quality_score || 0)"
+                :stroke-width="6"
+                style="width:120px;display:inline-block;"
+              />
             </template>
           </el-table-column>
           <el-table-column prop="create_time" label="预测时间" width="180" />
           <el-table-column prop="model_version" label="模型版本" width="140" show-overflow-tooltip />
         </el-table>
+
+        <!-- 分页 -->
+        <div class="pagination-wrapper">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="forecasts.length"
+            layout="total, sizes, prev, pager, next"
+            small
+            @size-change="onPageSizeChange"
+            @current-change="onPageChange"
+          />
+        </div>
       </el-card>
     </div>
   </div>
@@ -396,6 +424,17 @@ const total = ref(0)
 const upcoming = ref(null)
 const lotteryInfo = ref(null)
 const frequency = ref(null)
+
+// ---- 分页状态 ----
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+// ---- 分页后的预测记录 ----
+const paginatedForecasts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return forecasts.value.slice(start, end)
+})
 
 // ---- 质量评分范围 ----
 const qualityScoreRange = computed(() => {
@@ -558,6 +597,8 @@ const fetchData = async () => {
     upcoming.value = res.upcoming
     lotteryInfo.value = res.lottery_info
     frequency.value = res.frequency
+    // 重置分页到第一页
+    currentPage.value = 1
     if (res.message) ElMessage.info(res.message)
   } catch (e) {
     console.error('加载分析数据失败:', e)
@@ -565,6 +606,16 @@ const fetchData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// ---- 分页事件 ----
+const onPageChange = (page) => {
+  currentPage.value = page
+}
+
+const onPageSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
 }
 
 onMounted(fetchData)
@@ -871,12 +922,38 @@ onMounted(fetchData)
 .empty-state { padding: 40px 0; background: #fff; border-radius: 12px; }
 
 /* 预测列表 */
-.list-card { border-radius: 12px; }
-.list-card :deep(.el-card__header) { padding: 12px 18px; border-bottom: 1px solid #ebeef5; }
-.list-header { display: flex; align-items: center; justify-content: space-between; }
+.list-card {
+  border-radius: 12px;
+}
+.list-card :deep(.el-card__header) {
+  padding: 12px 18px;
+  border-bottom: 1px solid #ebeef5;
+}
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .list-title { font-size: 15px; font-weight: 600; color: #303133; }
-.list-card :deep(.el-table) { border-radius: 8px; overflow: hidden; }
-.list-card :deep(.el-table th) { background: #f5f7fa; }
+.list-card :deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+.list-card :deep(.el-table th) {
+  background: #f5f7fa;
+}
+
+/* 分页 */
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 14px;
+  margin-top: 6px;
+  border-top: 1px solid #ebeef5;
+}
+.pagination-wrapper :deep(.el-pagination) {
+  padding: 0;
+}
 
 /* 响应式 */
 @media (max-width: 768px) {
@@ -899,5 +976,9 @@ onMounted(fetchData)
   .freq-rate { width: 36px; font-size: 11px; }
   .freq-count { width: 40px; font-size: 10px; }
   .comb-item { margin-bottom: 12px; }
+  .pagination-wrapper { justify-content: center; }
+  .pagination-wrapper :deep(.el-pagination) .el-pagination__total {
+    display: none;
+  }
 }
 </style>

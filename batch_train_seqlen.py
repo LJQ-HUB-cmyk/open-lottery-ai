@@ -18,14 +18,14 @@ RETRY_DELAY = 2                 # 重试间隔（秒）
 REQUEST_TIMEOUT = 30            # 请求超时时间（秒）
 
 # ==================== 配置参数（最优精度） ====================
-lottery_type = "dlt"                # 彩种：大乐透
-epochs = 200                        # 训练轮数（最优）
-batch_size = 128                    # 批次大小（最优）
-learning_rate = 0.00005             # 学习率（最优）
+lottery_type = "ssq"                # 彩种：大乐透
+epochs = 1                        # 训练轮数（最优）
+batch_size = 1                    # 批次大小（最优）
+learning_rate = 0.1            # 学习率（最优）
 with_fetch = False                  # 不抓取数据（数据已存在）
 
 seq_len_start = 1
-seq_len_end = 2887                  # 最大序列长度（大乐透总期数约2887）
+seq_len_end = 2029                  # 最大序列长度（大乐透总期数约2887）
 
 # ==================== 提交任务函数（带重试） ====================
 def submit_task(seq_len):
