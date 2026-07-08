@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     API_PORT: int
 
     # Agent 相关配置
-    DEEPSEEK_API_KEY: str = "sk-5429dd574e6b40f092030849456a2730"
+    DEEPSEEK_API_KEY: str = "your-deepseek-api-key-here"
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     AGENT_ENABLED: bool = True
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
