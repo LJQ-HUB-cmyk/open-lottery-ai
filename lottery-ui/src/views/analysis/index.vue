@@ -306,7 +306,7 @@
 
         <!-- 最高评分模型 -->
         <div class="top-models-section">
-          <div class="freq-subtitle">🏆 最高质量评分模型 TOP 5</div>
+          <div class="freq-subtitle">🏆 最高质量评分模型 TOP 10</div>
           <el-table :data="frequency.top_models" border stripe size="small" style="width:100%;">
             <el-table-column prop="quality_score" label="质量评分" width="120">
               <template #default="{ row }">

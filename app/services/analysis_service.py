@@ -206,7 +206,7 @@ async def analyze_number_frequency(forecasts, lottery_type='ssq'):
         })
 
     # 获取最高评分的 TOP 5 模型
-    top_models = sorted(forecasts, key=lambda x: x.quality_score or 0, reverse=True)[:5]
+    top_models = sorted(forecasts, key=lambda x: x.quality_score or 0, reverse=True)[:10]
     top_models_data = []
     for f in top_models:
         if lottery_type == 'ssq':

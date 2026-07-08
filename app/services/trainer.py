@@ -37,12 +37,19 @@ def train_lottery_model(lottery_type, epochs=50, batch_size=32, seq_len=30, lr=1
     else:  # lottery_type == 'dlt'
         df = load_dlt_data_sync()
 
-    if df is None or len(df) < seq_len + 1:
-        raise ValueError(
-            f"数据量不足，需要至少 {seq_len + 1} 条记录，"
-            f"当前仅有 {len(df) if df is not None else 0} 条"
-        )
-    print(f"✅ 数据加载完成，共 {len(df)} 条记录")
+    if df is None or len(df) < 2:
+        raise ValueError(f"数据太少，无法训练，当前仅有 {len(df) if df is not None else 0} 条")
+
+    # ---- 自适应调整 seq_len ----
+    max_seq = len(df) - 1
+    if seq_len > max_seq:
+        print(f"⚠️ 警告：设置的 seq_len={seq_len} 超过数据量上限 {max_seq}，自动调整为 {max_seq}")
+        seq_len = max_seq
+    if seq_len < 1:
+        print(f"⚠️ 警告：seq_len={seq_len} 小于1，自动调整为 1")
+        seq_len = 1
+
+    print(f"✅ 数据加载完成，共 {len(df)} 条记录，实际使用 seq_len={seq_len}")
 
     # ---------- 2. 标准化特征和目标 ----------
     scaler = StandardScaler()

@@ -3,7 +3,6 @@
     <el-card>
       <template #header>🔮 生成预测</template>
       <el-form label-width="120px" label-position="top" class="predict-form">
-        <!-- 彩种选择 -->
         <el-form-item label="彩种">
           <el-radio-group v-model="lotteryType" @change="onLotteryChange">
             <el-radio value="ssq">双色球</el-radio>
@@ -11,7 +10,6 @@
           </el-radio-group>
         </el-form-item>
 
-        <!-- 模型多选 + 搜索 + 全选 -->
         <el-form-item label="选择模型">
           <div class="model-select-wrapper">
             <el-select
@@ -25,14 +23,12 @@
               :disabled="modelOptions.length === 0"
               @change="onModelChange"
             >
-              <!-- 全选选项 -->
               <el-option
                 key="__select_all__"
                 label="☑️ 全选"
                 value="__select_all__"
                 style="font-weight:bold;color:#409EFF;"
               />
-              <!-- 模型选项 -->
               <el-option
                 v-for="item in modelOptions"
                 :key="item.value"
@@ -46,7 +42,6 @@
               </el-option>
             </el-select>
 
-            <!-- 快捷操作 -->
             <div class="model-select-actions">
               <div class="model-stat">
                 <span class="stat-text">共 <strong>{{ modelOptions.length }}</strong> 个模型</span>
@@ -67,9 +62,11 @@
           </div>
         </el-form-item>
 
-        <!-- 操作按钮 -->
         <el-form-item>
           <div class="btn-group">
+            <el-button type="success" plain @click="handleAgentSelectModels" :loading="agentSelectLoading">
+              <el-icon><MagicStick /></el-icon> 智能选择并预测
+            </el-button>
             <el-button
               type="primary"
               @click="handlePredict"
@@ -85,7 +82,6 @@
       </el-form>
     </el-card>
 
-    <!-- 预测结果列表 -->
     <div v-if="results.length > 0" style="margin-top:20px;">
       <el-row :gutter="20">
         <el-col
@@ -138,7 +134,6 @@
       </el-row>
     </div>
 
-    <!-- 全局错误 -->
     <el-alert
       v-if="globalError"
       type="error"
@@ -152,13 +147,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { listModels } from '@/api/model'
 import { getPrediction } from '@/api/predict'
 import { ElMessage } from 'element-plus'
-import { Close } from '@element-plus/icons-vue'
+import { Close, MagicStick } from '@element-plus/icons-vue'
+import request from '@/utils/request'
 
-// ----- 状态 -----
 const lotteryType = ref('ssq')
 const selectedModels = ref([])
 const modelOptions = ref([])
@@ -166,24 +161,29 @@ const results = ref([])
 const loading = ref(false)
 const loadingModels = ref(false)
 const globalError = ref(null)
+const agentSelectLoading = ref(false)
 
-// ----- 获取模型实际列表（不含全选） -----
 const actualModelOptions = computed(() => {
   return modelOptions.value.filter(item => item.value !== '__select_all__')
 })
 
-// ----- 加载模型列表 -----
+// ===== 修复 loadModels =====
 const loadModels = async () => {
   loadingModels.value = true
   try {
     const res = await listModels()
-    const allModels = res.models || []
+    console.log('[loadModels] API 原始响应:', res)
+
+    // 兼容 res 或 res.data
+    const data = res.data || res
+    const allModels = data.models || []
+    console.log('[loadModels] 提取的模型列表:', allModels)
+
     const prefix = lotteryType.value
     const filtered = allModels
       .filter(name => name.endsWith('.pt') && name.startsWith(prefix))
-      .filter(name => !name.includes('_final'))   // 可选
+      .filter(name => !name.includes('_final'))
       .map(name => {
-        // 美化显示：提取参数信息
         const base = name.replace('.pt', '')
         const parts = base.split('_')
         let label = base
@@ -195,34 +195,32 @@ const loadModels = async () => {
           const timePart = parts[parts.length - 1] || ''
           label = `E${epochPart.replace('epochs','')} B${bsPart.replace('bs','')} S${seqPart.replace('seq','')} L${lrPart.replace('lr','').replace('_','.')} (${timePart})`
         }
-        return {
-          value: name,
-          label: label
-        }
+        return { value: name, label: label }
       })
-    // 按时间戳降序排列（最新在前）
     filtered.sort((a, b) => {
       const timeA = parseInt(a.value.split('_').pop().replace('.pt','')) || 0
       const timeB = parseInt(b.value.split('_').pop().replace('.pt','')) || 0
       return timeB - timeA
     })
     modelOptions.value = filtered
+    console.log('[loadModels] 最终 modelOptions:', modelOptions.value)
+
     // 清除已选但不再存在的模型
     selectedModels.value = selectedModels.value.filter(m =>
       filtered.some(item => item.value === m)
     )
+
     if (filtered.length === 0) {
       ElMessage.warning(`当前彩种 ${lotteryType.value === 'ssq' ? '双色球' : '大乐透'} 暂无可用模型，请先训练`)
     }
   } catch (e) {
-    console.error('加载模型列表失败:', e)
+    console.error('[loadModels] 加载失败:', e)
     ElMessage.error('加载模型列表失败')
   } finally {
     loadingModels.value = false
   }
 }
 
-// 彩种切换
 const onLotteryChange = () => {
   selectedModels.value = []
   results.value = []
@@ -230,38 +228,29 @@ const onLotteryChange = () => {
   loadModels()
 }
 
-// ----- 模型选择变化（处理全选逻辑） -----
 const onModelChange = (val) => {
-  // 检测是否点击了全选选项
   const hasSelectAll = val.includes('__select_all__')
   const actualModels = actualModelOptions.value.map(item => item.value)
 
   if (hasSelectAll) {
-    // 如果当前已全选，则取消全选；否则全选
     const isAllSelected = actualModels.every(m => val.includes(m))
     if (isAllSelected) {
-      // 已全选 → 取消全选（移除所有模型）
       selectedModels.value = []
     } else {
-      // 未全选 → 全选（包含所有模型）
       selectedModels.value = actualModels
     }
-    // 移除 __select_all__ 标识
     const cleanVal = selectedModels.value.filter(v => v !== '__select_all__')
     selectedModels.value = cleanVal
   }
 }
 
-// ----- 清空所有已选模型 -----
 const clearAllSelection = () => {
   selectedModels.value = []
   ElMessage.info('已清空所有选择')
 }
 
-// ----- 分批预测（每批最多 10 个） -----
 const BATCH_SIZE = 10
 
-// 预测
 const handlePredict = async () => {
   if (selectedModels.value.length === 0) {
     ElMessage.warning('请至少选择一个模型')
@@ -277,7 +266,6 @@ const handlePredict = async () => {
   let completed = 0
   const allResults = []
 
-  // 分批处理
   for (let i = 0; i < allModels.length; i += BATCH_SIZE) {
     const batch = allModels.slice(i, i + BATCH_SIZE)
     const promises = batch.map(async (modelName) => {
@@ -288,7 +276,6 @@ const handlePredict = async () => {
         })
         return { modelName, success: true, data }
       } catch (error) {
-        // 友好错误提示
         let msg = error.message || '预测失败'
         if (error.code === 'ECONNABORTED') {
           msg = '请求超时，请稍后重试'
@@ -333,50 +320,88 @@ const handlePredict = async () => {
   loading.value = false
 }
 
-// 清空
 const handleClear = () => {
   results.value = []
   globalError.value = null
 }
 
-// 生命周期
+// ===== 修复 handleAgentSelectModels（只选存在的模型） =====
+// ===== 智能选择模型并自动预测（增强版：无匹配时选择全部） =====
+const handleAgentSelectModels = async () => {
+  if (!lotteryType.value) {
+    ElMessage.warning('请先选择彩种')
+    return
+  }
+
+  // 先刷新模型列表
+  await loadModels()
+  if (modelOptions.value.length === 0) {
+    ElMessage.warning('暂无可用模型，请先训练')
+    return
+  }
+
+  agentSelectLoading.value = true
+  try {
+    console.log('[Agent] 请求模型推荐...')
+    const res = await request({
+      url: `/agent/recommend-models/${lotteryType.value}`,
+      method: 'get'
+    })
+    console.log('[Agent] 推荐响应:', res)
+
+    const modelList = res.models || res.data?.models || []
+    console.log('[Agent] 推荐模型列表:', modelList)
+
+    if (!Array.isArray(modelList) || modelList.length === 0) {
+      ElMessage.warning('暂无推荐模型，将选择当前所有模型')
+      selectedModels.value = modelOptions.value.map(item => item.value)
+      await nextTick()
+      await handlePredict()
+      return
+    }
+
+    const availableModelNames = modelOptions.value.map(item => item.value)
+    console.log('[Agent] 当前可用模型:', availableModelNames)
+
+    let validModels = modelList.filter(name => availableModelNames.includes(name))
+    console.log('[Agent] 匹配到的模型:', validModels)
+
+    if (validModels.length === 0) {
+      // 若没有匹配，选择当前所有模型
+      ElMessage.warning('推荐的模型都不在当前列表中，将选择当前所有模型进行预测')
+      validModels = availableModelNames
+    } else if (validModels.length < modelList.length) {
+      ElMessage.info(`推荐模型中有 ${modelList.length - validModels.length} 个不在当前列表中，将只使用存在的 ${validModels.length} 个`)
+    }
+
+    selectedModels.value = validModels
+    ElMessage.success(`已选择 ${validModels.length} 个模型，开始预测...`)
+
+    await nextTick()
+    await handlePredict()
+
+  } catch (e) {
+    const msg = e.response?.data?.detail || e.message || '智能选择失败'
+    console.error('[Agent] 错误:', e)
+    ElMessage.error('智能选择失败：' + msg)
+  } finally {
+    agentSelectLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadModels()
 })
 </script>
 
 <style scoped>
-.predict-container {
-  padding: 0;
-}
-.predict-form .el-form-item {
-  margin-bottom: 18px;
-}
-
-/* ===== 模型选择区域 ===== */
-.model-select-wrapper {
-  width: 100%;
-}
-
-/* 模型选项自定义样式 */
-.model-option {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-.model-option-label {
-  font-size: 13px;
-  font-family: 'Consolas', 'Courier New', monospace;
-  color: #303133;
-}
-.model-option-tag {
-  font-size: 10px;
-  opacity: 0.7;
-  flex-shrink: 0;
-}
-
-/* 快捷操作区域 */
+/* ... 样式保持不变 ... */
+.predict-container { padding: 0; }
+.predict-form .el-form-item { margin-bottom: 18px; }
+.model-select-wrapper { width: 100%; }
+.model-option { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.model-option-label { font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; color: #303133; }
+.model-option-tag { font-size: 10px; opacity: 0.7; flex-shrink: 0; }
 .model-select-actions {
   display: flex;
   justify-content: space-between;
@@ -385,8 +410,6 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 8px;
 }
-
-/* 统计信息 */
 .model-stat {
   display: flex;
   align-items: center;
@@ -394,106 +417,33 @@ onMounted(() => {
   font-size: 13px;
   color: #909399;
 }
-.stat-text {
-  color: #606266;
-}
-.stat-text strong {
-  color: #303133;
-}
-.stat-text .selected-count {
-  color: #409EFF;
-  font-weight: 700;
-  font-size: 15px;
-}
-.stat-divider {
-  color: #dcdfe6;
-  margin: 0 4px;
-}
-
-/* 清空按钮 */
-.clear-btn {
-  font-size: 12px;
-  padding: 4px 10px;
-  height: 28px;
-}
-.clear-btn .el-icon {
-  font-size: 14px;
-}
-
-/* 预测按钮带数量 */
-.btn-group .el-button--primary {
-  min-width: 120px;
-}
-
+.stat-text { color: #606266; }
+.stat-text strong { color: #303133; }
+.stat-text .selected-count { color: #409EFF; font-weight: 700; font-size: 15px; }
+.stat-divider { color: #dcdfe6; margin: 0 4px; }
+.clear-btn { font-size: 12px; padding: 4px 10px; height: 28px; }
+.clear-btn .el-icon { font-size: 14px; }
+.btn-group .el-button--primary { min-width: 120px; }
 .btn-group {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
-.btn-group .el-button {
-  flex: 1 0 auto;
-  min-width: 80px;
-}
-
-/* ===== 结果卡片 ===== */
-.result-card {
-  margin-bottom: 20px;
-  height: 100%;
-}
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.model-name {
-  font-weight: bold;
-  font-size: 14px;
-  color: #303133;
-}
-.result-content {
-  font-size: 14px;
-  line-height: 1.8;
-}
-.ball-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.result-tag {
-  margin: 2px 0;
-}
-.error-msg {
-  padding: 10px 0;
-}
-
-/* ===== 响应式 ===== */
+.btn-group .el-button { flex: 1 0 auto; min-width: 80px; }
+.result-card { margin-bottom: 20px; height: 100%; }
+.result-header { display: flex; justify-content: space-between; align-items: center; }
+.model-name { font-weight: bold; font-size: 14px; color: #303133; }
+.result-content { font-size: 14px; line-height: 1.8; }
+.ball-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.result-tag { margin: 2px 0; }
+.error-msg { padding: 10px 0; }
 @media (max-width: 768px) {
-  .predict-form .el-form-item {
-    margin-bottom: 14px;
-  }
-  .result-content {
-    font-size: 13px;
-  }
-  .result-tag {
-    font-size: 13px;
-    padding: 0 10px;
-    height: 28px;
-  }
-  .model-select-actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-  }
-  .model-stat {
-    justify-content: center;
-    font-size: 12px;
-  }
-  .clear-btn {
-    align-self: center;
-  }
-  .btn-group .el-button--primary {
-    min-width: 80px;
-  }
+  .predict-form .el-form-item { margin-bottom: 14px; }
+  .result-content { font-size: 13px; }
+  .result-tag { font-size: 13px; padding: 0 10px; height: 28px; }
+  .model-select-actions { flex-direction: column; align-items: stretch; gap: 6px; }
+  .model-stat { justify-content: center; font-size: 12px; }
+  .clear-btn { align-self: center; }
+  .btn-group .el-button--primary { min-width: 80px; }
 }
 </style>

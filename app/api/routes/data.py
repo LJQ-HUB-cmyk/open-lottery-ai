@@ -4,13 +4,14 @@
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from app.core.database import get_db
 from app.models.ssq_history import SSQHistory
 from app.models.dlt_history import DLTHistory
 from app.schemas.lottery import SSQHistoryResponse, DLTHistoryResponse
 
 router = APIRouter(prefix="/data", tags=["Data"])
+
 
 @router.get("/ssq")
 async def get_ssq_data(
@@ -23,11 +24,16 @@ async def get_ssq_data(
     - limit: 返回记录条数
     - offset: 偏移量，用于分页
     """
+    # 查询总记录数
+    total_result = await db.execute(select(func.count()).select_from(SSQHistory))
+    total = total_result.scalar_one()
+
     result = await db.execute(
         select(SSQHistory).order_by(desc(SSQHistory.issue_num)).offset(offset).limit(limit)
     )
     items = result.scalars().all()
-    return {"total": len(items), "items": items}
+    return {"total": total, "items": items}
+
 
 @router.get("/ssq/latest")
 async def get_latest_ssq(db: AsyncSession = Depends(get_db)):
@@ -38,6 +44,7 @@ async def get_latest_ssq(db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "No data")
     return row
 
+
 @router.get("/dlt")
 async def get_dlt_data(
     limit: int = Query(100, ge=1, le=1000),
@@ -45,11 +52,16 @@ async def get_dlt_data(
     db: AsyncSession = Depends(get_db)
 ):
     """获取大乐透历史数据"""
+    # 查询总记录数
+    total_result = await db.execute(select(func.count()).select_from(DLTHistory))
+    total = total_result.scalar_one()
+
     result = await db.execute(
         select(DLTHistory).order_by(desc(DLTHistory.issue_num)).offset(offset).limit(limit)
     )
     items = result.scalars().all()
-    return {"total": len(items), "items": items}
+    return {"total": total, "items": items}
+
 
 @router.get("/dlt/latest")
 async def get_latest_dlt(db: AsyncSession = Depends(get_db)):

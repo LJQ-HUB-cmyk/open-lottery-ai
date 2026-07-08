@@ -5,12 +5,22 @@
 彩种：大乐透 (dlt)
 参数：最优配置（epochs=200, batch_size=128, lr=0.00005）
 特性：请求失败时自动重试（最多3次）
+自动获取数据库总记录数，避免提交超限的 seq_len
 """
 
 import time
 import requests
 import json
 import csv
+import pymysql
+import sys
+from pathlib import Path
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# 导入配置
+from app.core.config import settings
 
 BASE_URL = "http://localhost:8000"
 MAX_RETRIES = 3                 # 最大重试次数
@@ -18,14 +28,40 @@ RETRY_DELAY = 2                 # 重试间隔（秒）
 REQUEST_TIMEOUT = 30            # 请求超时时间（秒）
 
 # ==================== 配置参数（最优精度） ====================
-lottery_type = "ssq"                # 彩种：大乐透
-epochs = 1                        # 训练轮数（最优）
-batch_size = 1                    # 批次大小（最优）
-learning_rate = 0.1            # 学习率（最优）
-with_fetch = False                  # 不抓取数据（数据已存在）
+lottery_type = "dlt"              # 彩种：ssq/dlt
+epochs = 2                      # 训练轮数（最优）
+batch_size = 32                  # 批次大小（最优）
+learning_rate = 0.00005           # 学习率（最优）
+with_fetch = False                # 不抓取数据（数据已存在）
+
+# ==================== 获取数据库总记录数 ====================
+def get_total_count():
+    """查询数据库中对应彩种的历史记录总数"""
+    conn = pymysql.connect(
+        host=settings.MYSQL_HOST,
+        port=settings.MYSQL_PORT,
+        user=settings.MYSQL_USER,
+        password=settings.MYSQL_PASSWORD,
+        database=settings.MYSQL_DATABASE
+    )
+    cursor = conn.cursor()
+    table = 'ssq_history' if lottery_type == 'ssq' else 'dlt_history'
+    cursor.execute(f"SELECT COUNT(*) FROM {table}")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+# 获取数据总量，动态设置最大 seq_len
+total = get_total_count()
+if total < 2:
+    print(f"❌ 数据太少（{total} 条），无法训练。")
+    sys.exit(1)
+
+max_seq = total - 1
+print(f"📊 数据库总记录数: {total}，最大可用 seq_len: {max_seq}")
 
 seq_len_start = 1
-seq_len_end = 2029                  # 最大序列长度（大乐透总期数约2887）
+seq_len_end = max_seq            # 自动设置为最大可用值
 
 # ==================== 提交任务函数（带重试） ====================
 def submit_task(seq_len):
@@ -65,7 +101,7 @@ def submit_task(seq_len):
 
 # ==================== 开始提交任务 ====================
 print("=" * 60)
-print("🚀 大乐透批量训练（最优配置）")
+print(f"🚀 {lottery_type.upper()} 批量训练（最优配置）")
 print(f"   彩种: {lottery_type}")
 print(f"   训练轮数: {epochs}")
 print(f"   批次大小: {batch_size}")
@@ -73,7 +109,7 @@ print(f"   学习率: {learning_rate}")
 print(f"   序列长度范围: {seq_len_start} ~ {seq_len_end}")
 print(f"   最大重试次数: {MAX_RETRIES}")
 print("=" * 60)
-print("⚠️  警告：将提交 2887 个训练任务，耗时可能长达数天！")
+print(f"⚠️  警告：将提交 {seq_len_end - seq_len_start + 1} 个训练任务，耗时可能较长！")
 confirm = input("是否继续？(输入 y 继续): ")
 if confirm.lower() != 'y':
     print("已取消。")
