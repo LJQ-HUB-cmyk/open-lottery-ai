@@ -440,10 +440,3 @@ Copyright (c) 2026 [ai-zxl](https://gitee.com/ai-zxl)
 ---
 
 ## 📮 联系方式
-
-- **项目维护者**：ai-zxl
-- **邮箱**：cloudai999@163.com
-- **Gitee 仓库**：[https://gitee.com/ai-zxl/open-lottery-ai](https://gitee.com/ai-zxl/open-lottery-ai)
-- **相关项目**：AI 训练服务 [open-unknown-ai](https://gitee.com/ai-zxl/open-unknown-ai)
-
-> 如有问题请先查阅 [Issues](https://gitee.com/ai-zxl/open-lottery-ai/issues) 和本文档，避免重复提问。
