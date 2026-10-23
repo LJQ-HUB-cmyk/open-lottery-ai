@@ -3,7 +3,9 @@
 大乐透历史开奖结果表 (dlt_history) 的 ORM 模型。
 """
 from sqlalchemy import Column, BigInteger, String, Date, Integer, DECIMAL, DateTime, func
+
 from app.core.database import Base
+
 
 class DLTHistory(Base):
     __tablename__ = "dlt_history"

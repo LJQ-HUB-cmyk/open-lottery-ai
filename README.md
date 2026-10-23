@@ -1,346 +1,449 @@
-# 🎰 Open-Lottery-AI
+# Open-Lottery-AI
 
 <p align="center">
-  <img alt="logo" src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/logo.png" width="120">
-</p>
-<h1 align="center" style="margin: 30px 0 30px; font-weight: bold;">Open-Lottery-AI v1.0.0</h1>
-
-<p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-v1.0.0-brightgreen.svg"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Python-3.10+-blue.svg"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Vue-3.5+-green.svg"></a>
-  <a href="#"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/Vue%203-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue 3">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
 </p>
 
-> 基于 **FastAPI + PyTorch + Transformer + Vue 3** 的彩票预测系统，目前支持双色球（SSQ）和大乐透（DLT）的数据管理、模型训练与预测推理。
+> 基于 **FastAPI + PyTorch + Transformer + Vue 3** 的**时序序列建模与深度学习工程实践**项目。以公开历史编号数据为样本，验证多标签分类、序列模型、自我学习闭环等算法在弱信号时序数据上的建模效果。
 
-**开源地址：** [https://github.com/ai-zxl/open-lottery-ai](https://github.com/ai-zxl/open-lottery-ai)
+> ⚠️ **重要免责声明**
+> - 本项目仅用于机器学习、时序数据分析与软件工程技术的学习交流，**不构成任何投资或决策建议**。
+> - 样本数据为**独立随机事件**，历史数据不包含未来结果的可预测信息，本项目模型输出的概率/号码**不具备任何实际价值**，**严禁用于任何商业或决策用途**。
+> - 本项目不提供任何销售、交易、代购、代投类服务，请遵守所在地区法律法规。
 
----
+## 🆕 最近更新
 
-## 📖 项目简介
+- **🔬 复试最优方案（GA 遗传算法优化）**：基于 AI 预测频率分数，使用遗传算法对每个复试档位独立进化号码池；融合热号、冷门反向变异、区间覆盖、奇偶均衡、历史回测命中、档位差异化等 5 维适应度，自动展开 7+1 / 8+2 / 12+4 等全档位组合并入库存档。
+- **🎯 本期模型过滤**：`/models/list?current_period=true` 仅返回最近一期开奖号发布之后训练的本期模型，避免用旧数据推断。
+- **💰 复试命中奖金评估**：自动按官方固定奖级规则计算历史命中金额、奖级分布与浮动奖注数，回填 `forecast_analysis` 表。
 
-**Open-Lottery-AI** 是一个端到端的彩票数据预测系统，通过历史开奖数据训练深度学习模型（Transformer 架构），预测未来开奖结果。系统包含：
+## 🛠 技术栈
 
-- 📊 **数据抓取模块**：增量抓取双色球和大乐透历史数据（`scripts/` 目录）
-- 🗄️ **数据管理模块**：MySQL 存储历史数据及 20+ 分析字段（和值、跨度、奇偶比、AC 值等）
-- 🧠 **模型训练模块**：基于 PyTorch + Transformer 的异步训练服务（Celery + RabbitMQ）
-- 🔮 **预测推理模块**：支持多模型选择，生成预测号码并保存到数据库
-- 📈 **预测分析模块**：整合今日预测记录，提取最优推荐号码，与开奖结果对比
-- 🖥️ **Web 管理界面**：Vue3 可视化面板，支持数据浏览、训练控制、预测展示和结果分析
+| 层 | 技术 |
+|---|------|
+| 后端框架 | FastAPI (异步, OpenAPI) |
+| 深度学习 | PyTorch `nn.TransformerEncoder` + 多标签分类（BCEWithLogitsLoss） |
+| 异步任务 | RabbitMQ + Celery |
+| 数据库 | MySQL 8.0 + SQLAlchemy 2.0 (asyncmy 异步 / pymysql 同步) |
+| 缓存 / 状态 | Redis（Celery 结果后端 + 独立异步缓存客户端） |
+| 数据处理 | Pandas + NumPy + scikit-learn (StandardScaler) |
+| 前端 | Vue 3 + Vite + Element Plus + Pinia + ECharts |
+| 部署 | Docker Compose |
 
-项目采用 **前后端分离** 架构，后端提供 REST API，前端独立部署，适合企业级 AI 平台集成。
+## ✨ 核心特性
 
----
+### 🤖 深度学习建模
 
-## 🎯 核心特性
+**多标签分类训练**（非回归）：对每个可能号码输出概率，用 BCEWithLogitsLoss + 正样本权重补偿（pos_weight）训练
+- 推断时从概率分布取**确定性 Top-K 号码**（前段取概率最高的 6 个、后段取最高的 1/2 个，升序返回，保证可复现）
+- 训练中实时评估 Top-K **命中率**（技术评估指标，指模型输出与历史样本的吻合比例；前段/后段/综合，按号码个数加权）
+- 质量评分公式：`0.7 × avg(选中前段概率) + 0.3 × avg(选中后段概率)`，clip 到 [0.1, 1.0]
 
-### 后端（Python）
+**特征工程**：数据库全字段 + 号码频率 + 移动窗口统计
+- 数据集 A：99 维特征（50 基础 + 33 前段频率 + 16 后段频率）+ 49 维 multi-hot 目标 = 148 列
+- 数据集 B：99 维特征（52 基础 + 35 前段频率 + 12 后段频率）+ 47 维 multi-hot 目标 = 146 列
 
-- ✅ **异步任务队列**：基于 RabbitMQ + Celery，支持多 Worker 并发训练，任务持久化
-- ✅ **深度学习框架**：PyTorch + Transformer，支持自定义超参数（轮数、批次、序列长度、学习率）
-- ✅ **多模型管理**：每次训练根据参数生成唯一模型文件名（`{彩种}_epochs{N}_bs{N}_seq{N}_lr{N}_{时间戳}.pt`），永不覆盖
-- ✅ **数据管理**：MySQL 存储历史数据及 20+ 分析字段（和值、跨度、奇偶比、AC 值等）
-- ✅ **进度缓存**：Redis 缓存训练进度，支持高频状态轮询
-- ✅ **REST API**：FastAPI 自动生成 OpenAPI 文档（Swagger UI）
-- ✅ **设备支持**：自动检测 GPU（CUDA）或回退到 CPU 训练
-- ✅ **水平扩展**：支持增加 Celery Worker 数量或部署多个 FastAPI 实例
-- ✅ **一键训练**：支持训练前自动抓取最新数据，保持数据最新
+**模型结构**：`LotteryClassifier` — 双头分类（前段头 + 后段头），序列特征聚合（last + mean pooling），3 层 MLP 分类头
 
-### 前端（Vue3）
+**训练流程**：验证集时间切分 → Early Stopping (patience ≥ 20，按**验证命中率**而非 loss 选 Best Model) → CosineAnnealingLR → 梯度裁剪 → fp16 混合精度 → Best Model → 训练曲线 + 命中率落盘 JSON
 
-- ✅ **首页**：最新开奖数据（双色球 + 大乐透）+ 已训练模型列表
-- ✅ **数据管理**：分页浏览双色球/大乐透历史数据（红球/前区、蓝球/后区、和值、跨度）
-- ✅ **模型训练**：可视化配置超参数（训练轮数 1-500、批次大小 1-256、序列长度 10-3000、学习率 5位精度），实时轮询训练状态
-- ✅ **预测结果**：支持**多模型同时预测**，每个模型生成独立的预测结果卡片
-- ✅ **预测分析**：展示今日所有预测记录，基于质量评分加权提取最优推荐号码，与开奖结果对比显示命中情况
-- ✅ **开奖规则展示**：显示双色球（二、四、日）和大乐透（一、三、六）开奖规则及下一期开奖倒计时
-- ✅ **开放架构**：无需登录，开箱即用，可扩展权限模块
+**训练细节**：
+- 正样本权重 `pos_weight = (号码空间 - 每注号码数) / 每注号码数`，补偿多标签正负不均衡
+- 命中率 = Top-K 模型输出号码与真实号码交集 / 真实号码数（技术吻合度指标）；综合命中率按前后段号码个数加权
+- 标准化器 `StandardScaler` 仅在训练段拟合（防数据泄漏），multi-hot 目标不参与标准化
+- 单模型回测 GPU 批处理：所有回测期窗口打包一次前向，单模型 <1 秒
 
----
+**训练脚本**：`batch_train_seqlen.py` 无限循环随机超参搜索，30 秒提交一个任务，CSV 记录 best_val_loss / best_hit_rate 等
 
-## 🛠️ 技术栈
+### 🔄 自我学习闭环
 
-### 后端
+```
+训练模型 → 逐期回测模型吻合度 → 写入 model_score 表
+                ↓（反馈）
+  ┌─────────────┴──────────────┐
+  │ 智能选模：按回测表现选模型     │
+  │ 集成推断：表现加权融合 Top-5  │ → 推断号码入库
+  └────────────────────────────┘
+```
 
-| 组件               | 技术选型                                     |
-| ------------------ | -------------------------------------------- |
-| Web 框架           | FastAPI 0.115+ (异步, OpenAPI 自动生成)      |
-| 异步任务队列       | RabbitMQ 3.12 + Celery 5.6+                  |
-| 数据库             | MySQL 8.0 + SQLAlchemy 2.0 (asyncmy 驱动)   |
-| 缓存               | Redis 7.0                                    |
-| 深度学习框架       | PyTorch 2.5 + Transformers 4.46              |
-| 数据处理           | Pandas 2.2 + NumPy 1.26                      |
-| 配置管理           | Pydantic Settings + python-dotenv            |
-| 部署               | Docker Compose (开发/生产)                   |
+- **回测服务** (`backtest_service.py`)：逐期 walk-forward 回测，30 期窗口批量前向推理，40 个模型仅需 ~6 秒
+- **集成推断** (`ensemble_service.py`)：按回测表现加权融合 Top-5 模型概率分布，生成推断号码
+- **模型评分** (`model_score` 表)：记录每个模型的前段/后段/综合命中率（技术吻合度），驱动智能选模
 
-### 前端
+**训练侧反馈（P1-P4 自我强化）**：回测结果不仅用于选模，还反向注入下一轮训练：
 
-| 组件         | 技术选型                    |
-| ------------ | --------------------------- |
-| 框架         | Vue 3.5+ (Composition API)  |
-| 构建工具     | Vite 8.0+                   |
-| UI 组件库    | Element Plus 2.8+           |
-| 状态管理     | Pinia 2.2+                  |
-| 路由管理     | Vue Router 4.4+             |
-| HTTP 客户端  | Axios 1.7+ (统一拦截器)     |
+| 阶段 | 机制 | 实现 |
+|------|------|------|
+| **P1 困难期次加权** | Top-K 模型平均命中率 < 0.3 的期次，训练样本权重 ×2.0 | `get_hard_periods()` → sample_weights |
+| **P2 超参元学习** | 统计 Top-20 模型的 epochs/batch_size/lr 分布，供新训练偏向采样 | `get_top_hyperparams()` |
+| **P3 弱点号码加权** | 未命中率 > 0.7 的号码，对应列 loss 权重 ×2.0 | `get_weak_numbers()` → class_weights |
+| **P4 自适应淘汰** | 回测 hit_total < 阈值的模型优先从磁盘删除（保留本期模型 + Top 榜单） | `cleanup_old_models(low_score_threshold=...)` |
 
----
+困难期次 / 弱点号码 / 超参分布均带 1 小时进程内缓存，避免每次训练重复计算。
 
-## 🏗️ 系统架构
+### 🎯 一键智能推断流水线
 
-~~~
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Vue3 前端 (lottery-ui) │
-│ ├─ 首页仪表盘（最新开奖 + 模型列表） │
-│ ├─ 数据管理（分页浏览历史数据） │
-│ ├─ 模型训练（配置参数 + 状态监控） │
-│ ├─ 预测结果（多模型并行预测） │
-│ └─ 预测分析（推荐号码 + 开奖对比） │
-└─────────────────────────────────────┬───────────────────────────────────────┘
-│ HTTP (代理 /api → localhost:8000)
-┌─────────────────────────────────────▼───────────────────────────────────────┐
-│ FastAPI 后端 (app/) │
-│ ├─ api/routes/ - 数据管理 / 训练 / 预测 / 模型 / 分析 API │
-│ ├─ core/ - 配置 / 数据库 / Redis / Celery │
-│ ├─ models/ - SQLAlchemy ORM 模型 │
-│ ├─ schemas/ - Pydantic 请求/响应模型 │
-│ ├─ services/ - 数据加载 / Transformer / 训练器 / 预测器 / 分析器 │
-│ └─ tasks/ - Celery 异步训练任务 │
-└─────────┬───────────────────────────────────────┬─────────────────────────┘
-│ │
-│ 数据流 │ 任务分发
-▼ ▼
-┌─────────────────────────────────────┐ ┌─────────────────────────────────┐
-│ MySQL │ │ Celery Worker │
-│ - ssq_history (双色球历史) │ │ (异步训练任务) │
-│ - dlt_history (大乐透历史) │ │ ├─ 加载历史数据 │
-│ - ssq_forecast (双色球预测) │ │ ├─ 标准化 + 构造序列 │
-│ - dlt_forecast (大乐透预测) │ │ ├─ Transformer 模型训练 │
-└─────────────────────────────────────┘ │ └─ 保存模型 & 标准化器 │
-│ └─────────────────────────────────┘
-│ 数据更新（手动执行脚本 或 一键训练自动触发）
-▼
-┌─────────────────────────────────────┐
-│ 数据抓取脚本 (scripts/) │
-│ - fetch_ssq_incremental.py │
-│ - fetch_dlt_incremental.py │
-└─────────────────────────────────────┘
-~~~
+推断页主按钮「🚀 一键智能推断」串联自我学习闭环（**技术验证用途，模型输出仅作算法效果展示，严禁用于商业或决策用途**），四步自动完成：
 
-**数据流说明**：
+```
+提交回测任务（Celery 后台评分，提交即走不阻塞）
+        ↓
+智能选模 → 批量并行推断（全部选中模型一次请求）
+        ↓
+集成融合（按回测表现加权 Top-5；首次运行先等回测出分再融合）
+        ↓
+自动生成复试方案（GA 优化全部档位并写入 forecast_analysis）
+```
 
-1. **数据抓取** → 增量更新到 MySQL（`scripts/fetch_*.py` 或一键训练自动触发）
-2. **前端配置** → 提交训练参数（彩种、轮数、批次、序列长度、学习率）
-3. **FastAPI** → 生成 `task_id`，通过 Celery 发布任务到 RabbitMQ
-4. **Celery Worker** → 消费任务，加载历史数据，训练 Transformer 模型，保存到 `models_storage/`（唯一文件名）
-5. **前端轮询** → 每 5 秒查询训练状态（pending/running/completed/failed）
-6. **预测推理** → 用户选择模型（支持多选），加载对应模型生成预测号码，存入 `*_forecast` 表
-7. **前端展示** → 每个模型独立卡片展示预测号码、质量评分、模型版本
-8. **预测分析** → 整合今日所有预测，加权推荐最优号码，与开奖结果对比
+- **批量并行推断** `POST /predict/batch/{lottery_type}`（流式版 `/predict/batch-stream/`）：数据只加载一次，torch 推理经 `asyncio.to_thread` 丢线程池 16 路并行（单推理单线程 `torch.set_num_threads(1)` 避免核数超订，不阻塞事件循环），NDJSON 逐模型推送实时进度（`X-Accel-Buffering: no` 防代理缓冲，前端按 `\n` 切分解析兼容半包粘包）；结果单会话批量入库
+- **前端实时反馈**：进度条展示真实进度（已完成/总数、成功/失败计数与百分比），结果卡片完成一个追加一个；请求中断时未完成模型统一标记失败；结果区分页渲染（每页 30 张）避免大量 DOM 卡顿
+- **模型缓存**：模型权重 / StandardScaler / meta 按 `(路径, mtime)` 缓存且为**有界 LRU**（权重上限 256 个，数千模型不全量常驻防 OOM），重训覆盖自动失效，缓存加载加线程锁双重检查；集成服务复用同一缓存，成员模型并行推理
+- **大批量入库**：目标日期已有记录一次查全、内存匹配后批量 insert/update + 单次 commit，避免数千次数据库往返
+- **分析页性能**（`/analysis/today`、`/data/similarity`）：历史相似度从「逐条 set 重建的 O(F×H) / O(N²) 双重循环」改为**号码位掩码 + numpy 向量化 popcount**（号码 n → bit n-1，交集即位与计数），2000+ 期历史 × 数千推断亚秒级完成，结果与原算法逐位一致；动态阈值与全量自相似结果按最新编号缓存（新批次导入自动失效）；全组合表 ID 由逐条 N 次 session 查询改为单会话元组 IN 分块批量查询；相似度标记落库走 Core `update() + case()` 批量 UPDATE（每 200 行一批，由编译器原生绑定参数，仅值变化时执行）；CPU 计算均经 `asyncio.to_thread` 不阻塞事件循环
+- **回测容错**：已有评分时直接用旧评分集成、回测后台静默刷新；首次运行自动等待回测完成；等待有 15 分钟上限（worker 未启动时明确报错而非无限轮询）
 
----
+### 🔬 复试最优方案（GA 遗传算法优化）
 
-## 📁 项目目录结构
+> 仅作为算法工程实验展示，模型输出号码**不具备任何实际价值**，严禁用于商业或决策用途。
 
-~~~
-open-lottery-ai/                                    # 项目根目录
-│
-├── app/                                            # 后端主应用（FastAPI）
-│   ├── api/                                        # REST API 路由层
-│   │   └── routes/                                 # 路由定义
-│   │       ├── health.py                           # 健康检查接口
-│   │       ├── data.py                             # 数据查询接口（双色球/大乐透）
-│   │       ├── train.py                            # 训练任务接口（提交/状态查询）
-│   │       ├── predict.py                          # 预测推理接口
-│   │       ├── models.py                           # 模型管理接口（列表/下载）
-│   │       └── analysis.py                         # 预测分析接口（推荐号码+开奖对比）
-│   ├── core/                                       # 核心配置与基础设施
-│   │   ├── config.py                               # 环境变量配置（Pydantic Settings）
-│   │   ├── database.py                             # MySQL 异步引擎、会话工厂
-│   │   ├── redis_client.py                         # Redis 连接池
-│   │   └── celery_app.py                           # Celery 应用配置
-│   ├── models/                                     # SQLAlchemy ORM 数据模型
-│   │   ├── ssq_history.py                          # 双色球历史数据表
-│   │   ├── dlt_history.py                          # 大乐透历史数据表
-│   │   ├── ssq_forecast.py                         # 双色球预测结果表
-│   │   └── dlt_forecast.py                         # 大乐透预测结果表
-│   ├── schemas/                                    # Pydantic 请求/响应模型
-│   │   └── lottery.py                              # 彩种、训练、预测相关 Schema
-│   ├── services/                                   # 业务逻辑层
-│   │   ├── data_loader.py                          # 数据加载器（特征工程）
-│   │   ├── transformer_model.py                    # Transformer 模型定义
-│   │   ├── trainer.py                              # 模型训练器（保存模型+标准化器）
-│   │   ├── predictor.py                            # 预测服务（多模型预测）
-│   │   ├── analysis_service.py                     # 预测分析服务（推荐+对比）
-│   │   └── fetch_service.py                        # 数据抓取服务（调用抓取脚本）
-│   ├── tasks/                                      # Celery 异步任务
-│   │   └── training_jobs.py                        # 训练任务定义（含一键完整训练）
-│   ├── __init__.py                                 # 包标识文件
-│   └── main.py                                     # FastAPI 应用入口
-│
-├── lottery-ui/                                     # Vue3 前端项目
-│   ├── src/
-│   │   ├── api/                                    # API 接口层
-│   │   │   ├── data.js                             # 数据接口
-│   │   │   ├── train.js                            # 训练接口
-│   │   │   ├── predict.js                          # 预测接口
-│   │   │   ├── model.js                            # 模型管理接口
-│   │   │   └── analysis.js                         # 分析接口
-│   │   ├── router/                                 # 路由配置
-│   │   │   └── index.js
-│   │   ├── store/                                  # Pinia 状态管理
-│   │   │   ├── index.js                            # 统一导出
-│   │   │   ├── useDataStore.js                     # 数据状态
-│   │   │   ├── useTrainStore.js                    # 训练状态
-│   │   │   └── usePredictStore.js                  # 预测状态
-│   │   ├── utils/                                  # 工具函数
-│   │   │   ├── request.js                          # Axios 统一请求封装
-│   │   │   └── index.js                            # 通用工具（日期/格式化）
-│   │   ├── views/                                  # 页面视图
-│   │   │   ├── home/                               # 首页（仪表盘）
-│   │   │   ├── data/                               # 数据管理（历史数据浏览）
-│   │   │   ├── train/                              # 模型训练（参数配置+状态监控）
-│   │   │   ├── predict/                            # 预测结果（多模型并行预测）
-│   │   │   └── analysis/                           # 预测分析（推荐号码+开奖对比）
-│   │   ├── App.vue                                 # 根组件
-│   │   ├── main.js                                 # 入口文件
-│   │   └── permission.js                           # 路由守卫（开放系统）
-│   ├── .env.development                            # 开发环境变量
-│   ├── .env.production                             # 生产环境变量
-│   ├── package.json                                # 依赖管理
-│   └── vite.config.js                              # Vite 构建配置
-│
-├── models_storage/                                 # 训练生成的模型文件目录
-│   ├── {彩种}_epochs{N}_bs{N}_seq{N}_lr{N}_{时间戳}.pt  # PyTorch 模型
-│   ├── {彩种}_epochs{N}_bs{N}_seq{N}_lr{N}_{时间戳}_scaler.joblib  # 标准化器
-│   ├── {彩种}_final.pt                             # 最新模型快照
-│   └── {彩种}_scaler.joblib                        # 最新标准化器
-│
-├── scripts/                                        # 数据抓取脚本
-│   ├── __init__.py
-│   ├── fetch_ssq_incremental.py                    # 双色球增量抓取
-│   ├── fetch_dlt_incremental.py                    # 大乐透增量抓取
-│   ├── generate_ssq_all.py                         # 双色球全量生成
-│   └── generate_dlt_all.py                         # 大乐透全量生成
-│
-├── sql/                                            # SQL 建表脚本
-│   └── open-lottery.sql                            # 完整建表语句
-│
-├── .env.development                                # 开发环境变量
-├── .env.production                                 # 生产环境变量
-├── .gitignore                                      # Git 忽略文件
-├── batch_train_seqlen.py                           # 批量训练脚本（序列长度扫描）
-├── docker-compose.yml                              # 依赖服务（MySQL/Redis/RabbitMQ）
-├── LICENSE                                         # MIT 许可证
-├── README.md                                       # 项目文档
-└── requirements.txt                                # Python 依赖清单
+由 `fushi_service.py` + `ga_optimizer.py` 驱动，在预测入库后自动生成多档复试方案并写入 `forecast_analysis` 表：
 
-~~~
+```
+AI 预测频率分数（所有号码 0~1 分）
+        ↓
+遗传算法（每档独立进化）
+  - 初始种群：70% 热号 + 30% 冷门
+  - 适应度：0.35 频率 + 0.25 区间覆盖/奇偶均衡 + 0.25 近 30 期回测命中 - 0.10 档位重合 - 0.05 金额爆炸
+  - 反向变异：20% 概率将基因替换为低频率冷门号码
+  - 精英保留 + 80 代进化
+        ↓
+按档位 C(n红, k红) × C(n蓝, k蓝) 展开全部组合注
+        ↓
+写入 forecast_analysis（含 optimization_meta GA 元信息）
+```
 
+- **档位矩阵**：双色球 7+1 ~ 12+4 共 24 档，大乐透 6+2 ~ 11+4 共 18 档，注数/金额严格按官方复试规则。
+- **触发时机**：一键智能预测 / 批量预测 / 单模型预测完成后自动写入；analysis 页只读展示，hit-analysis 页读取命中回填。
+- **历史命中评估**：开奖号公布后自动按官方奖级规则计算奖级、固定奖金、浮动奖注数并回填。
 
----
+### 📊 统计分析与编号核对
 
-## 🔍 核心功能详解
+- **统计图表** (`GET /data/trend/{lottery_type}?periods=100`)：前段/后段号码频率、当前间隔、高频/低频号码 TOP5、和值/跨度趋势、奇偶/大小分布，前端 ECharts 多图联动
+- **编号核对** (`/hit-analysis/*`)：新批次数据导入后选择历史批次，将该批次全部推断记录与实际数据逐条核对匹配数并按规则匹配等级判定（技术吻合度验证），降序展示
+- **历史相似度分析**：推断号码与全部历史数据做 Jaccard 相似度对比，动态阈值（均值+1σ）计算相似度；**不剔除记录**，仅将 `max_similarity` / `matched_history_issue` 落库标记供展示，编号核对全部推断参与统计
+- **全组合 ID 查询**：推断号码在 `ssq_all` / `dlt_all` 全组合表中查找对应 ID
+- **历史自相似度分析**：每期数据与所有上期对比，输出分布统计（均值/中位数/TOP 10/直方图）
 
-### 1. 模型训练（一键完整训练）
+## 📂 目录结构
 
-- 支持双色球和大乐透两种彩种
-- 可配置参数：训练轮数（1-500）、批次大小（1-256）、序列长度（10-3000）、学习率（5位精度）
-- 支持训练前自动抓取最新数据（增量更新）
-- 每次训练生成唯一模型文件名，永不覆盖
-- 实时轮询训练状态（等待中/抓取数据/训练中/已完成/失败）
+```
+open-lottery-ai/
+├── app/                               # 后端 (FastAPI)
+│   ├── api/routes/                     # 路由
+│   │   ├── health.py                   # 健康检查
+│   │   ├── data.py                     # 历史数据 + 统计图表 + 相似度分析
+│   │   ├── train.py                    # 训练提交 + 状态查询
+│   │   ├── predict.py                  # 推断 + 批量推断 + 回测 + 集成 + 榜单
+│   │   ├── models.py                   # 模型文件管理
+│   │   ├── analysis.py                 # 推断分析 + 相似度标记
+│   │   ├── hit_analysis.py             # 编号核对（规则匹配等级判定）
+│   │   └── agent.py                    # AI Agent 对话（超参/选模推荐）
+│   ├── core/                           # 基础设施
+│   │   ├── config.py                   # 配置管理（pydantic-settings，按 APP_ENV 选 .env）
+│   │   ├── database.py                 # 异步/同步双引擎 + 会话工厂
+│   │   ├── redis_client.py             # Redis 异步客户端
+│   │   ├── celery_app.py               # Celery 应用配置
+│   │   ├── migrations.py               # 幂等迁移（补齐列/索引/唯一约束）
+│   │   └── agent_templates.py          # Agent system/user prompt 模板
+│   ├── models/                         # SQLAlchemy ORM
+│   │   ├── ssq_history.py / dlt_history.py     # 数据集 A/B 历史数据
+│   │   ├── ssq_forecast.py / dlt_forecast.py   # 推断记录
+│   │   └── model_score.py                      # 模型回测评分
+│   ├── schemas/                        # Pydantic 请求/响应
+│   ├── services/
+│   │   ├── data_loader.py              # 数据加载 + 特征工程（全字段 + 频率 + multi-hot）
+│   │   ├── transformer_model.py        # LotteryClassifier 分类模型
+│   │   ├── trainer.py                  # 训练器 (BCE Loss + Early Stopping + 命中率 + fp16 + P1~P4)
+│   │   ├── predictor.py                # 推断器 (确定性 Top-K + 批量并行 + LRU 缓存)
+│   │   ├── backtest_service.py         # 逐期回测 + 评分写入 model_score + 困难期次/弱点号码分析
+│   │   ├── ensemble_service.py         # 回测表现加权融合 Top-K 集成推断
+│   │   ├── analysis_service.py         # 推断分析 + 动态阈值相似度标记 + 标记批量落库
+│   │   ├── fushi_service.py            # 复试最优方案：频率计算 + 档位独立 GA 优化 + 组合展开 + 落库
+│   │   ├── ga_optimizer.py             # 遗传算法核心（编码/5维适应度/交叉/变异/精英保留）
+│   │   ├── hit_analysis_service.py     # 编号核对（推断 vs 实际逐条比对 + 匹配等级）
+│   │   ├── agent_service.py            # AI Agent (DeepSeek + RAG 历史任务向量检索)
+│   │   ├── number_utils.py             # 号码提取统一工具
+│   │   └── fetch_service.py            # 数据抓取调用
+│   ├── scripts/
+│   │   ├── fetch_ssq_incremental.py    # 数据集 A 增量抓取
+│   │   ├── fetch_dlt_incremental.py    # 数据集 B 增量抓取
+│   │   ├── generate_ssq_all.py         # 生成数据集 A 全组合表
+│   │   └── generate_dlt_all.py         # 生成数据集 B 全组合表
+│   ├── tasks/training_jobs.py           # Celery 任务 (start_training / run_backtest / run_full_pipeline)
+│   └── main.py                         # 入口
+├── lottery-ui/                        # Vue3 前端
+│   └── src/views/
+│       ├── dashboard/                  # 仪表盘
+│       ├── data/                       # 数据管理 + 统计图表 (TrendAnalysis.vue) + 相似度分析
+│       ├── train/                      # 模型训练
+│       ├── predict/                    # 一键智能推断 + 回测 + 集成（推断完成后自动生成复试）
+│       ├── analysis/                   # 推断分析 + 复试方案展示
+│       └── hit-analysis/               # 编号核对（匹配明细）+ 复试命中展示
+├── models/{ssq,dlt}/                   # 训练产物（根目录，按数据集分目录）
+│   ├── {run_id}.pt                     # 模型权重 (history.json / meta.json / scaler.joblib 配套)
+│   ├── {lottery}_final.pt              # 最新 Best Model
+│   ├── {lottery}_final_meta.json       # 元信息 (model_type / input_dim / num_red / hit_rate ...)
+│   ├── {lottery}_final_scaler.joblib   # 标准化器（仅特征列）
+│   └── batch_train_results.csv         # 批量训练结果记录
+├── sql/open-lottery.sql                # 建表脚本
+├── tests/test_pure_logic.py            # 纯逻辑单元测试
+├── batch_train_seqlen.py               # 无限循环随机超参搜索脚本
+├── auto_train.bat                      # Windows 启动批量训练脚本
+├── docker-compose.yml                  # MySQL / Redis / RabbitMQ
+├── requirements.txt
+└── .env.development / .env.production
+```
 
-### 2. 多模型预测
+## 🏗 系统架构
 
-- 支持同时选择多个模型进行预测
-- 每个模型生成独立的预测结果卡片
-- 展示预测号码（红球/前区 + 蓝球/后区）、质量评分、模型版本
-- 同一天同一模型只保留一条预测记录（自动更新）
+```
+Vue3 前端 ──HTTP/NDJSON──► FastAPI ──发布──► RabbitMQ ──消费──► Celery Worker
+     │                        │                                      │
+     │                        ├── MySQL (history + forecast + model_score)
+     │                        ├── Redis (Celery 结果后端 + 缓存客户端)
+     │                        └── models/ (模型文件读写)
+     │
+     └── 页面: 仪表盘 / 数据管理(统计图表) / 训练 / 推断(一键流水线) / 分析 / 编号核对
+```
 
-### 3. 预测分析
+**数据流**：数据抓取 → MySQL → 前端提交训练参数 → Celery 异步训练 → 模型落盘 `models/` → 批量推断（概率 Top-K 号码）→ 推断结果存 `*_forecast` → 回测验证 → 表现写入 `model_score` →（反馈）训练侧 P1~P4 加权 + 集成推断 / 智能选模 → 新批次数据导入后逐条核对匹配等级
 
-- 展示今日所有预测记录
-- 基于质量评分加权提取最优推荐号码
-- 显示双色球和大乐透的开奖规则（二、四、日 / 一、三、六）
-- 下一期开奖日期倒计时
-- 与开奖结果对比，显示命中个数
+**数据库双引擎**：FastAPI 请求走 `asyncmy` 异步引擎；Celery Worker 与 Agent 走 `pymysql` 同步引擎（`sync_engine`）。
 
-### 4. 模型管理
+**幂等迁移**：启动时 `run_migrations()` 自动补齐缺失列（`is_removed` / `max_similarity` / `matched_history_issue`）与索引（含 forecast 表唯一约束建前先去重），无需手动 ALTER TABLE。
 
-- 模型文件按 `{彩种}_epochs{N}_bs{N}_seq{N}_lr{N}_{时间戳}.pt` 格式命名
-- 同时保留 `{彩种}_final.pt` 作为最新模型
-- 支[services](app/services)持模型列表查看和下载
-
----
+**非发布日处理**：通过 `LOTTERY_HOLIDAYS` 配置（逗号分隔 ISO 日期），结果发布日计算自动跳过非发布期（最多向后查找 30 天，覆盖长假等）。
 
 ## 🚀 快速开始
 
-### 前提条件
-
-- Python 3.10+ 和 Conda（推荐）
-- Node.js 16+ 和 npm/yarn
-- Docker 和 Docker Compose
-
-### 一键启动
-
-~~~
-
-# 1. 启动依赖服务
-cd open-lottery-ai
+```bash
+# 1. 启动依赖
 docker-compose up -d
-sleep 10
-docker ps
-
-# 2. 初始化数据库
 docker exec -i lottery-mysql mysql -uroot -p123456 < sql/open-lottery.sql
 
-# 3. 抓取历史数据
-cd scripts
-python fetch_ssq_incremental.py
-python fetch_dlt_incremental.py
-cd ..
+# 2. 配置环境变量（复制并修改）
+cp .env.development .env   # 或直接编辑 .env.development / .env.production
+# 关键项：MYSQL_* / REDIS_* / CELERY_BROKER_URL / MODEL_SAVE_DIR / DEVICE / DEEPSEEK_API_KEY
 
-# 4. 创建并激活 Conda 环境
-conda create -n lottery python=3.10 -y
-conda activate lottery
+# 3. 抓取数据
+python app/scripts/fetch_ssq_incremental.py
+python app/scripts/fetch_dlt_incremental.py
 
-# 5. 安装后端依赖
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 4. 生成全组合表（可选，用于推断组合的全局 ID 查询；导入后需重启服务）
+python app/scripts/generate_ssq_all.py
+python app/scripts/generate_dlt_all.py
 
-# 6. 配置环境变量
-copy .env.development .env
+# 5. 启动后端（终端1）
+conda activate pytorch
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# 启动时 run_migrations() 会自动补齐缺失列（如 forecast_analysis.optimization_meta），无需手动 ALTER。
 
-# 7. 启动 FastAPI 服务（终端1）
-start cmd /k "conda activate lottery && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+# 6. 启动 Worker（终端2）
+conda activate pytorch
+# Windows 必须用 threads 池：solo 池让训练任务占用主事件循环，会导致心跳阻塞/任务卡死
+celery -A app.core.celery_app worker --loglevel=info --pool=threads -c 1 -Q celery
 
-# 8. 启动 Celery Worker（终端2）
-start cmd /k "conda activate lottery && celery -A app.core.celery_app worker --loglevel=info --pool=solo -c 1 -Q celery"
+# 6b. 启动 Beat（终端4，可选）：启用自我进化定时调度时需要
+celery -A app.core.celery_app beat --loglevel=info
 
-# 9. 安装前端依赖
-cd lottery-ui
-npm install --registry=https://registry.npmmirror.com
+# 7. 启动前端（终端3）
+cd lottery-ui && npm run dev
+```
 
-# 10. 启动前端服务（终端3）
-start cmd /k "npm run dev"
+访问：前端 http://localhost:8888 / API 文档 http://localhost:8000/docs / RabbitMQ http://localhost:15672 (guest/guest)
 
-# 访问前端: http://localhost:8888
-# API 文档: http://localhost:8000/docs
-# RabbitMQ 管理: http://localhost:15672 (guest/guest)
+## 🔄 批量训练脚本
 
-~~~
+`batch_train_seqlen.py` 无限循环随机搜索最优超参，每 30 秒提交一个训练任务：
 
-### 演示图
+| 参数 | 随机范围 |
+|------|---------|
+| 数据集 | ssq / dlt |
+| epochs | 50 ~ 200 |
+| batch_size | 16 / 32 / 64 / 128 |
+| lr | 1e-5 ~ 1e-3（对数均匀采样） |
+| seq_len | 取数据量上限（trainer 自动确保 ≥ 500 条训练样本） |
 
-<div align="center">
-  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery01.png" width="48%" />
-  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery02.png" width="48%"/>
-</div>
-<br/>
-<div align="center">
-  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery03.png" width="48%" />
-  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery04.png" width="48%"/>
-</div>
-<div align="center">
-  <img src="https://ai-zxl-1419463292.cos.ap-chengdu.myqcloud.com/open-unknown/lottery05.png" width="96%" />
-</div>
+- 启动时自动调用增量抓取脚本更新数据
+- 提交后不等结果，30 秒后提交下一个（失败自动重试 3 次）
+- CSV 追加记录到 `models/batch_train_results.csv`：lottery_type / epochs / batch_size / seq_len / lr / **best_val_loss** / **best_hit_rate** / best_epoch / final_hit_rate / input_dim / run_id / status
+
+Windows 双击 `auto_train.bat` 即可启动。
+
+## 🧬 自我进化闭环（自动定时）
+
+Celery Beat 每日定时触发任务 `run_self_evolution`，在数据更新后自动跑完一轮完整进化：
+
+**检测新数据 → 回测打分 → 按高表现模型超参采样(P2) → 批量训练 N 个模型 → 复测 → 晋升榜单 → 集成推断入库**
+
+- 任务内含「新数据闸门」：抓取后最新批次编号未变化则跳过本轮，避免空跑。
+- 训练内部自动生效 P1（困难批次样本加权）与 P3（弱点编号 loss 加权）。
+- 非破坏性：只新增模型，不删除历史模型（磁盘清理仍走 `cleanup_old_models`，默认关闭）。
+
+配置项（`.env.*` 可覆盖）：
+
+| 配置项 | 默认 | 说明 |
+|--------|------|------|
+| `SELF_EVOLVE_ENABLED` | `true` | 是否注册 Beat 定时任务 |
+| `SELF_EVOLVE_N_MODELS` | `15` | 每轮训练模型数（建议 10-20） |
+| `SELF_EVOLVE_HOUR` / `SELF_EVOLVE_MINUTE` | `9` / `30` | 每日触发时刻（本地时区） |
+
+- **定时**：需单独启动 Beat 进程（见启动步骤 6b）。
+- **手动补跑**：`POST /train/evolve`，body `{"lottery_type":"ssq","n_models":2,"force":true}`，返回 `task_id`，可用 `/train/status/{task_id}` 查询进度。
+
+> 提示：单轮训练 N 个模型耗时较长，worker 并发为 1 时按顺序执行；建议先用较小的 `SELF_EVOLVE_N_MODELS` 验证效果。
+
+## 🗑 模型磁盘清理
+
+`cleanup_old_models()` 按需清理模型三件套（`.pt` / `_scaler.joblib` / `_meta.json`），保留策略：
+- **本期模型全部保留**：训练时间戳 ≥ 最近一期结果发布日 00:00 的模型
+- **最近 N 个模型**：`MODEL_KEEP_LATEST`（默认 80）
+- **回测榜单 Top M**：`MODEL_KEEP_TOP_SCORED`（默认 20）
+- **P4 自适应淘汰**：`low_score_threshold > 0` 时，已回测且 `hit_total` 低于阈值的模型优先删除（Top 榜单不受影响）
+- 所有 `*_final` 版本始终保留；`model_score` 表评分记录不受清理影响
+
+## 📦 训练产物
+
+每次训练生成 `{run_id}` 前缀的四件套：
+
+| 文件 | 内容 |
+|------|------|
+| `{run_id}.pt` | 模型权重（Best Model，按验证命中率选择） |
+| `{run_id}_scaler.joblib` | StandardScaler（仅特征列） |
+| `{run_id}_history.json` | train_loss / val_loss / lr / hit_rate 曲线 |
+| `{run_id}_meta.json` | model_type / 超参 / best_epoch / best_val_loss / best_hit_rate / input_dim / num_red / num_blue / pred_seq_len |
+
+推断时自动读取 `{lottery}_final_meta.json`，若 `model_type == "classifier"` 则重建 `LotteryClassifier` 并用概率分布 Top-K 输出号码。
+
+## 🔌 API 概览
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/data/{lottery_type}` | GET | 历史编号数据（分页） |
+| `/data/{lottery_type}/latest` | GET | 最新一期数据 |
+| `/data/trend/{lottery_type}` | GET | 统计图表（频率/间隔/高频低频/和值跨度/奇偶大小，`periods` 30~500） |
+| `/data/similarity/{lottery_type}` | GET | 历史自相似度分析（全量/可选批次数量） |
+| `/train/start` | POST | 提交训练任务（Celery 异步） |
+| `/train/evolve` | POST | 手动触发一轮自我进化闭环（Celery 异步） |
+| `/train/status/{task_id}` | GET | 查询训练/回测任务状态 |
+| `/predict/` | POST | 单模型推断 |
+| `/predict/batch/{lottery_type}` | POST | 批量并行推断（多模型一次请求，线程池并行推理） |
+| `/predict/batch-stream/{lottery_type}` | POST | 批量推断流式版（NDJSON 逐行推送单模型进度，前端实时进度条） |
+| `/predict/backtest/{lottery_type}` | POST | 触发回测（Celery 异步，评分写 model_score） |
+| `/predict/leaderboard/{lottery_type}` | GET | 模型回测得分榜单 |
+| `/predict/ensemble/{lottery_type}` | POST | 集成推断（回测表现加权 Top-5 融合） |
+| `/analysis/today` | GET | 推断分析（含相似度标记 + all 表 ID） |
+| `/analysis/fushi/list` | GET | 复试方案列表（全部档位，按预测日期倒序） |
+| `/analysis/fushi/evaluate` | POST | 对历史开奖后的复试方案批量评估命中与奖金 |
+| `/hit-analysis/draws` | GET | 可做核对的历史批次列表（须有对标推断） |
+| `/hit-analysis/detail` | GET | 单批次推断逐条匹配明细 + 匹配等级判定 |
+| `/models/list` | GET | 模型文件列表（`current_period=true` 时仅返回最近一期结果发布后训练的本期模型） |
+| `/agent/recommend-models/{lottery_type}` | GET | Agent 按回测表现智能推荐模型 |
+| `/agent/recommend-hyperparams` | POST | Agent 推荐训练超参 |
+
+## 🗄 数据模型
+
+| 表 | 用途 | 关键字段 / 约束 |
+|----|------|----------------|
+| `ssq_history` / `dlt_history` | 历史结果数据（含预计算统计字段） | 编号唯一索引；号码列 + 和值/跨度/奇偶/大小/模3/连号等统计列 |
+| `ssq_forecast` / `dlt_forecast` | 推断记录 | 唯一约束 `(forecast_date, model_version)`；`quality_score` / `is_removed` / `max_similarity` / `matched_history_issue` |
+| `model_score` | 模型回测命中率（技术吻合度） | 唯一约束 `(lottery_type, model_name)`；复合索引 `(lottery_type, hit_total)` 支撑榜单查询 |
+| `forecast_analysis` | 复试方案分析 | 唯一约束 `(lottery_type, forecast_date, pattern)`；JSON 字段 `red_pool` / `blue_pool` / `combo_detail` / `optimization_meta`；命中回填 `is_history_hit` / `prize_level` / `prize_amount` / `prize_detail` / `float_prize_count` |
+| `ssq_all` / `dlt_all` | 全组合映射表（号码组合 → id） | 静态表，由 `generate_*_all.py` 离线生成，带进程内 LRU 缓存 |
+
+## ⚙️ 配置项与环境变量
+
+环境变量按 `APP_ENV` 选择 `.env.development` / `.env.production`（默认 development）：
+
+| 变量 | 说明 |
+|------|------|
+| `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` | MySQL 连接 |
+| `REDIS_HOST/PORT/PASSWORD/DB` | Redis 连接 |
+| `CELERY_BROKER_URL` | Celery broker（默认 RabbitMQ `amqp://guest:guest@localhost:5672//`） |
+| `CELERY_RESULT_BACKEND` | 结果后端（默认 Redis） |
+| `MODEL_SAVE_DIR` | 模型文件保存目录 |
+| `DEVICE` | 训练设备 `cuda` / `cpu` |
+| `FETCH_TIMEOUT` | 抓取脚本超时（秒，默认 120） |
+| `BACKTEST_PERIODS` | 回测滑动窗口期数（默认 30） |
+| `ENSEMBLE_TOP_K` | 集成融合取榜单前 K 个模型（默认 5） |
+| `AGENT_MODEL_TOP_K` | 智能选模返回前 K 个（默认 5） |
+| `MODEL_KEEP_LATEST` / `MODEL_KEEP_TOP_SCORED` | 磁盘清理保留数量 |
+| `LOTTERY_HOLIDAYS` | 非发布日期（逗号分隔 ISO 日期） |
+| `CORS_ORIGINS` | 允许的跨域来源 |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` | Agent 大模型配置 |
+| `EMBEDDING_MODEL_NAME` / `RAG_TOP_K` / `RAG_ENABLED` | RAG 嵌入模型与检索配置（默认关闭） |
+
+## 🤖 AI Agent 机制
+
+- **超参推荐**：调用 DeepSeek LLM（system prompt 限定输出 JSON），失败或 key 无效时**熔断**并回退本地经验超参（epochs=200, bs=128, seq=50, lr=5e-5）
+- **RAG 检索**（`RAG_ENABLED=true` 时启用）：用 `SentenceTransformer(all-MiniLM-L6-v2)` 对历史训练任务批量编码，按余弦相似度取 Top-K 相似任务作为 LLM 上下文（首次加载约 10s）
+- **模型推荐**：优先按 `model_score.hit_total` 取 Top-K（自我学习反馈），无评分时回退到推断质量评分排序
+- 嵌入模型强制离线模式（`HF_HUB_OFFLINE=1`），未缓存时不联网
+
+## 📖 自我学习闭环使用
+
+1. **批量训练**：运行 `batch_train_seqlen.py`，持续产出不同超参的模型
+2. **一键智能推断**：推断页点「🚀 一键智能推断」（**仅作算法效果展示，严禁用于商业或决策用途**），自动完成：
+   - 后台提交回测（Celery 异步评分，不阻塞）
+   - Agent 智能选模 → 批量并行推断（百量级模型秒级）
+   - 按回测表现加权融合 Top-5 生成推断号码（首次运行自动等回测出分）
+   - 单步操作（Agent 选模 / 单模型推断 / 集成 / 回测 / 清选）收在「更多操作」下拉中
+3. **统计图表**：数据管理页「📈 走势图」Tab，查看频率/间隔/和值跨度分布
+4. **编号核对**：新批次数据导入后在「吻合度分析」页选择历史批次，逐条核对模型输出与实际数据的吻合度与规则匹配等级
+
+> 回测样本量随数据积累动态增长，榜单自适应更新——这是"自我学习"的核心：模型吻合度反馈驱动模型选择。
+>
+> 注意：回测/训练是 Celery 异步任务，必须启动 Worker（`celery -A app.core.celery_app worker --pool=threads`），否则任务一直 pending，集成会因无评分等待至超时。
+
+---
+
+## 📄 许可证
+
+本项目采用 [MIT](LICENSE) 许可证，详情见 LICENSE 文件。
+
+Copyright (c) 2026 [ai-zxl](https://gitee.com/ai-zxl)
+
+---
+
+## 🤝 贡献指南
+
+欢迎 Issue 和 Pull Request！请按以下流程参与贡献：
+
+1. **Fork** 本仓库
+2. 创建特性分支：`git checkout -b feature/your-feature`
+3. 提交更改：`git commit -m 'feat: add your feature'`（遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范）
+4. 推送分支：`git push origin feature/your-feature`
+5. 提交 **Pull Request**
+
+### 代码规范
+
+- **Python**：遵循 [PEP 8](https://peps.python.org/pep-0008/)，类型注解使用 `typing`
+- **Vue / JavaScript**：遵循 [Vue.js 风格指南](https://vuejs.org/style-guide/)
+- **SQL / ORM**：字段命名统一使用蛇形命名，新增列必须同步 `app/core/migrations.py` 与 `sql/open-lottery.sql`
+- **提交信息**：格式 `<type>(<scope>): <subject>`，常见 type 包括 `feat`、`fix`、`docs`、`refactor`、`test`
+
+---
+
+## 📮 联系方式
+
+- **项目维护者**：ai-zxl
+- **邮箱**：cloudai999@163.com
+- **Gitee 仓库**：[https://gitee.com/ai-zxl/open-lottery-ai](https://gitee.com/ai-zxl/open-lottery-ai)
+- **相关项目**：AI 训练服务 [open-unknown-ai](https://gitee.com/ai-zxl/open-unknown-ai)
+
+> 如有问题请先查阅 [Issues](https://gitee.com/ai-zxl/open-lottery-ai/issues) 和本文档，避免重复提问。

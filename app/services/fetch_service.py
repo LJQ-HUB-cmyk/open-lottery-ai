@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.core.config import settings
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 def run_fetch_script(lottery_type: str) -> dict:
@@ -29,7 +31,7 @@ def run_fetch_script(lottery_type: str) -> dict:
             [python_exec, str(script_path)],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=settings.FETCH_TIMEOUT,
             cwd=str(BASE_DIR),
             env=env  # 添加环境变量
         )
@@ -38,6 +40,6 @@ def run_fetch_script(lottery_type: str) -> dict:
         else:
             return {'success': False, 'message': result.stderr.strip() or '脚本执行失败'}
     except subprocess.TimeoutExpired:
-        return {'success': False, 'message': '数据抓取超时（超过2分钟）'}
+        return {'success': False, 'message': f'数据抓取超时（超过 {settings.FETCH_TIMEOUT} 秒）'}
     except Exception as e:
         return {'success': False, 'message': str(e)}

@@ -1,11 +1,12 @@
-import pymysql
 from itertools import combinations
 
+import pymysql
+
 DB_CONFIG = {
-    'host': '192.168.2.100',
+    'host': '127.0.0.1',
     'user': 'root',
     'password': '123456',
-    'database': 'open-lottery',
+    'database': 'openun-lottery',
     'charset': 'utf8mb4'
 }
 
@@ -76,7 +77,7 @@ def generate_all_combinations():
     backs = list(range(1, 13))
 
     batch = []
-    batch_size = 10000
+    batch_size = 50000
     total = 0
 
     for front_combo in combinations(fronts, 5):

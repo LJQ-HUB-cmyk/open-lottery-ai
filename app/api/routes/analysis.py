@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-预测分析 API 路由。
+预测分析 + 复试分析 API 路由。
+业务逻辑在 analysis_service / fushi_service，路由仅做参数校验与异常包装。
 """
+from datetime import date, datetime
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query
-from app.services.analysis_service import (
-    get_today_forecasts,
-    analyze_best_recommendation,
-    analyze_number_frequency,
-    get_today_latest_result,
-    get_upcoming_draw_info,
-    LOTTERY_RULES,
-    get_target_draw_date
+from pydantic import BaseModel, Field
+
+from app.services.analysis_service import get_today_analysis_payload
+from app.services.fushi_service import (
+    generate_fushi, list_fushi, evaluate_fushi_history,
 )
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
@@ -19,103 +20,77 @@ router = APIRouter(prefix="/analysis", tags=["Analysis"])
 @router.get("/today")
 async def get_today_analysis(lottery_type: str = Query('ssq', description="彩种：ssq或dlt")):
     """
-    获取当前开奖期的预测分析结果，包含：
-    - 所有预测记录
-    - 最优推荐号码
-    - 今日开奖结果（若有）
-    - 号码频率统计
+    获取当前开奖期的预测分析结果：预测记录（全部保留，相似度仅标记）、
+    最优推荐号码、开奖结果、号码频率统计、全组合表 ID（未导入全组合时为空）。
     """
+    if lottery_type not in ('ssq', 'dlt'):
+        raise HTTPException(400, "lottery_type 必须是 ssq 或 dlt")
     try:
-        target_date = get_target_draw_date(lottery_type)
-        if target_date is None:
-            return {
-                "forecasts": [],
-                "recommendation": None,
-                "result": None,
-                "message": f"未找到 {lottery_type} 的下一个开奖日",
-                "lottery_info": None,
-                "upcoming": None,
-                "target_draw_date": None,
-                "frequency": None
-            }
-
-        forecasts = await get_today_forecasts(lottery_type)
-        rule = LOTTERY_RULES.get(lottery_type)
-
-        if not forecasts:
-            return {
-                "forecasts": [],
-                "recommendation": None,
-                "result": None,
-                "message": f"当前开奖期（{target_date.strftime('%Y-%m-%d')}）暂无预测数据",
-                "lottery_info": {
-                    "name": rule['name'] if rule else lottery_type,
-                    "draw_days": rule['draw_days'] if rule else [],
-                    "draw_count": rule['draw_count'] if rule else 0
-                },
-                "upcoming": await get_upcoming_draw_info(lottery_type),
-                "target_draw_date": target_date.strftime("%Y-%m-%d"),
-                "frequency": None
-            }
-
-        # 最优推荐
-        recommendation = await analyze_best_recommendation(forecasts, lottery_type)
-        # 号码频率统计
-        frequency = await analyze_number_frequency(forecasts, lottery_type)
-        # 今日开奖结果
-        latest_result = await get_today_latest_result(lottery_type)
-
-        # 格式化预测数据
-        formatted_forecasts = []
-        for f in forecasts:
-            if lottery_type == 'ssq':
-                reds = [f.red_one, f.red_two, f.red_three, f.red_four, f.red_five, f.red_six]
-                blue = f.blue_one
-            else:  # dlt
-                reds = [f.red_one, f.red_two, f.red_three, f.red_four, f.red_five]
-                blue = [f.blue_one, f.blue_two]
-
-            formatted_forecasts.append({
-                "red": reds,
-                "blue": blue,
-                "quality_score": f.quality_score,
-                "create_time": f.create_time.strftime("%Y-%m-%d %H:%M:%S") if f.create_time else None,
-                "model_version": f.model_version
-            })
-
-        # 格式化开奖结果
-        result_data = None
-        if latest_result:
-            if lottery_type == 'ssq':
-                result_data = {
-                    "red": [latest_result.red_one, latest_result.red_two, latest_result.red_three,
-                            latest_result.red_four, latest_result.red_five, latest_result.red_six],
-                    "blue": latest_result.blue_one,
-                    "issue_num": latest_result.issue_num,
-                    "draw_date": latest_result.draw_date.strftime("%Y-%m-%d") if latest_result.draw_date else None
-                }
-            else:  # dlt
-                result_data = {
-                    "red": [latest_result.front_one, latest_result.front_two, latest_result.front_three,
-                            latest_result.front_four, latest_result.front_five],
-                    "blue": [latest_result.back_one, latest_result.back_two],
-                    "issue_num": latest_result.issue_num,
-                    "draw_date": latest_result.draw_date.strftime("%Y-%m-%d") if latest_result.draw_date else None
-                }
-
-        return {
-            "forecasts": formatted_forecasts,
-            "recommendation": recommendation,
-            "result": result_data,
-            "total": len(forecasts),
-            "lottery_info": {
-                "name": rule['name'] if rule else lottery_type,
-                "draw_days": rule['draw_days'] if rule else [],
-                "draw_count": rule['draw_count'] if rule else 0
-            },
-            "upcoming": await get_upcoming_draw_info(lottery_type),
-            "target_draw_date": target_date.strftime("%Y-%m-%d"),
-            "frequency": frequency
-        }
+        return await get_today_analysis_payload(lottery_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+# ============ 复试分析 ============
+
+class FushiGenerateRequest(BaseModel):
+    lottery_type: str = Field(..., description="ssq 或 dlt")
+    forecast_date: Optional[str] = Field(None, description="指定日期 YYYY-MM-DD，不传取当前目标开奖日")
+
+
+@router.post("/fushi/generate")
+async def post_fushi_generate(req: FushiGenerateRequest):
+    """
+    根据当期预测号码频率，生成 7+1 / 7+2 / 8+1 / 8+2 四档复试方案并入库。
+    """
+    if req.lottery_type not in ('ssq', 'dlt'):
+        raise HTTPException(400, "lottery_type 必须是 ssq 或 dlt")
+    try:
+        target = date.fromisoformat(req.forecast_date) if req.forecast_date else None
+        result = await generate_fushi(req.lottery_type, target)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"复试生成失败: {str(e)}")
+
+
+@router.get("/fushi/list")
+async def get_fushi_list(
+    lottery_type: str = Query(..., description="ssq 或 dlt"),
+    forecast_date: Optional[str] = Query(None, description="指定日期，不传返回最新 N 期"),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """
+    查询已生成的复试方案（含全部注展开 combo_detail）。
+    forecast_date 不传 → 返回最新 N 期。
+    """
+    if lottery_type not in ('ssq', 'dlt'):
+        raise HTTPException(400, "lottery_type 必须是 ssq 或 dlt")
+    try:
+        target = date.fromisoformat(forecast_date) if forecast_date else None
+        rows = await list_fushi(lottery_type, target, limit=limit)
+        return {"items": rows, "total": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询复试失败: {str(e)}")
+
+
+class FushiEvaluateRequest(BaseModel):
+    lottery_type: str = Field(..., description="ssq 或 dlt")
+    issue_num: Optional[int] = Field(None, description="开奖期号（二选一）")
+    forecast_date: Optional[str] = Field(None, description="开奖日期 YYYY-MM-DD（二选一）")
+
+
+@router.post("/fushi/evaluate")
+async def post_fushi_evaluate(req: FushiEvaluateRequest):
+    """
+    对某期已开奖的复试方案，计算历史命中评估（每注中多少，最高奖级）并回填 hit_analysis 表。
+    """
+    if req.lottery_type not in ('ssq', 'dlt'):
+        raise HTTPException(400, "lottery_type 必须是 ssq 或 dlt")
+    if req.issue_num is None and not req.forecast_date:
+        raise HTTPException(400, "issue_num 和 forecast_date 必须至少传一个")
+    try:
+        key = req.issue_num if req.issue_num is not None else req.forecast_date
+        result = await evaluate_fushi_history(req.lottery_type, key)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"历史评估失败: {str(e)}")

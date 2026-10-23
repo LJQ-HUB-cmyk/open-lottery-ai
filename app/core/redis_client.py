@@ -3,6 +3,7 @@
 Redis 异步客户端，用于缓存和状态管理。
 """
 import redis.asyncio as redis
+
 from .config import settings
 
 redis_client = redis.from_url(

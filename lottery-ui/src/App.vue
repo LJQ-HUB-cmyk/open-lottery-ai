@@ -19,7 +19,7 @@
           <el-icon><DataBoard /></el-icon>
           <span>数据管理</span>
         </el-menu-item>
-        <el-menu-item index="/train">
+        <el-menu-item index="/training">
           <el-icon><Cpu /></el-icon>
           <span>模型训练</span>
         </el-menu-item>
@@ -30,6 +30,14 @@
         <el-menu-item index="/analysis">
           <el-icon><DataAnalysis /></el-icon>
           <span>预测分析</span>
+        </el-menu-item>
+        <el-menu-item index="/diagnostic">
+          <el-icon><Aim /></el-icon>
+          <span>真实性诊断</span>
+        </el-menu-item>
+        <el-menu-item index="/hit-analysis">
+          <el-icon><DataLine /></el-icon>
+          <span>数据分析</span>
         </el-menu-item>
       </el-menu>
 
@@ -55,7 +63,7 @@
             <el-icon><DataBoard /></el-icon>
             <span>数据管理</span>
           </el-menu-item>
-          <el-menu-item index="/train">
+          <el-menu-item index="/training">
             <el-icon><Cpu /></el-icon>
             <span>模型训练</span>
           </el-menu-item>
@@ -67,6 +75,14 @@
             <el-icon><DataAnalysis /></el-icon>
             <span>预测分析</span>
           </el-menu-item>
+          <el-menu-item index="/diagnostic">
+            <el-icon><Aim /></el-icon>
+            <span>真实性诊断</span>
+          </el-menu-item>
+          <el-menu-item index="/hit-analysis">
+          <el-icon><DataLine /></el-icon>
+          <span>数据分析</span>
+          </el-menu-item>
         </el-menu>
       </el-drawer>
     </el-header>
@@ -77,15 +93,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import {
-  Menu,
-  House,
-  DataBoard,
-  Cpu,
-  TrendCharts,
-  DataAnalysis
-} from '@element-plus/icons-vue'
+import {ref} from 'vue'
+import {Cpu, DataAnalysis, DataBoard, House, Menu, TrendCharts} from '@element-plus/icons-vue'
 
 const drawer = ref(false)
 </script>

@@ -2,9 +2,10 @@
 """
 数据库异步引擎与会话管理，同时提供同步引擎用于 Celery Worker 和 Agent。
 """
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
+
 from .config import settings
 
 # ---------- 异步引擎（用于 FastAPI） ----------

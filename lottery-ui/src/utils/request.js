@@ -1,23 +1,22 @@
 /**
  * Axios 请求封装
- * 统一处理请求/响应拦截，全局错误提示
- * 无 Token 认证，适用于开放系统
+ * 统一处理响应与错误提示。无 Token 认证，适用于内网开放系统。
+ * 后端为 FastAPI：成功直接返回裸 JSON（无统一 code 包裹），
+ * 业务错误通过 HTTP 状态码 + {detail} 表达，故成功分支直接取 data。
+ * 长耗时任务（批量预测等）走 fetch 流式接口，不受此超时限制。
  */
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import {ElMessage} from 'element-plus'
 
-// 创建 Axios 实例
+// 创建 Axios 实例（单次请求可用 config.timeout 覆盖）
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 120000 // 请求超时时间 120 秒（原 30 秒）
+  timeout: 120000
 })
 
 // 请求拦截器（可添加 Token、Loading 等）
 service.interceptors.request.use(
-  (config) => {
-    // 无需添加 token，直接返回配置
-    return config
-  },
+  (config) => config,
   (error) => {
     console.error('请求错误:', error)
     return Promise.reject(error)
@@ -26,20 +25,21 @@ service.interceptors.request.use(
 
 // 响应拦截器
 service.interceptors.response.use(
-  (response) => {
-    const res = response.data
-    // 后端返回格式：{ code: 200, data: ..., message: ... }
-    // 如果 code 存在且不为 200，视为业务错误
-    if (res.code !== undefined && res.code !== 200) {
-      ElMessage.error(res.message || '系统异常')
-      return Promise.reject(new Error(res.message || 'Error'))
-    }
-    // 成功返回 data 部分
-    return res
-  },
+  (response) => response.data,   // 成功：FastAPI 裸 JSON 直接返回
   (error) => {
+    // FastAPI HTTPException 体为 {detail}（字符串或 {message}）
+    const detail = error.response?.data?.detail
+    const serverMsg = typeof detail === 'string'
+      ? detail
+      : (detail?.message || '')
+    const isTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')
+
+    if (isTimeout) {
+      ElMessage.error('请求超时：数据量较大，请稍后重试，或改用流式/异步任务入口')
+    } else {
+      ElMessage.error(serverMsg || error.message || '网络异常')
+    }
     console.error('响应错误:', error)
-    ElMessage.error(error.message || '网络异常')
     return Promise.reject(error)
   }
 )

@@ -201,6 +201,90 @@
         </el-row>
       </div>
 
+      <!-- ---- 复试分析卡片 ---- -->
+      <div v-if="fushiPlans && fushiPlans.length > 0" class="fushi-box">
+        <div class="fushi-header">
+          <span class="fushi-icon">🎲</span>
+          <span class="fushi-title">复试最优方案</span>
+          <el-tag v-if="fushiDate" type="info" size="small" round>期 {{ fushiDate }}</el-tag>
+          <el-tag v-if="fushiPlans[0]?.freq_support" type="success" size="small" round>
+            {{ fushiPlans[0].freq_support }} 条频率支撑
+          </el-tag>
+        </div>
+
+        <el-row :gutter="12">
+          <el-col v-for="plan in fushiPlans" :key="plan.pattern" :xs="24" :sm="12" :md="6">
+            <div class="fushi-plan">
+              <div class="plan-header">
+                <span class="plan-pattern">{{ plan.pattern }}</span>
+                <el-tag v-if="plan.prize_level" type="danger" size="small" effect="dark">
+                  {{ plan.prize_level }}
+                </el-tag>
+                <el-tag v-else-if="plan.is_history_hit" type="warning" size="small">
+                  历史中过奖
+                </el-tag>
+              </div>
+
+              <div class="plan-pool">
+                <span class="pool-label">🔴 红球池 ({{ plan.red_pool.length }})</span>
+                <div class="pool-balls">
+                  <span v-for="r in plan.red_pool" :key="r" class="ball ball-red ball-tiny">
+                    {{ String(r).padStart(2, '0') }}
+                  </span>
+                </div>
+              </div>
+              <div class="plan-pool">
+                <span class="pool-label">🔵 蓝球池 ({{ plan.blue_pool.length }})</span>
+                <div class="pool-balls">
+                  <span v-for="b in plan.blue_pool" :key="b" class="ball ball-blue ball-tiny">
+                    {{ String(b).padStart(2, '0') }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="plan-stats">
+                <div class="stat-item">
+                  <span class="stat-label">注数</span>
+                  <span class="stat-value">{{ plan.bet_count }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">金额</span>
+                  <span class="stat-value">¥{{ plan.bet_amount }}</span>
+                </div>
+              </div>
+
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                block
+                @click="toggleCombo(plan)"
+              >
+                {{ expandedCombo === plan.pattern ? '收起全部注' : `展开全部注 (${plan.bet_count})` }}
+              </el-button>
+
+              <div v-if="expandedCombo === plan.pattern" class="combo-list">
+                <div
+                  v-for="(combo, i) in plan.combo_detail"
+                  :key="i"
+                  class="combo-item"
+                >
+                  <span class="combo-num">{{ i + 1 }}.</span>
+                  <template v-for="r in combo.red" :key="'r'+r">
+                    <span class="ball ball-red ball-tiny">{{ String(r).padStart(2, '0') }}</span>
+                  </template>
+                  <span class="combo-plus">+</span>
+                  <template v-if="Array.isArray(combo.blue)" v-for="b in combo.blue" :key="'b'+b">
+                    <span class="ball ball-blue ball-tiny">{{ String(b).padStart(2, '0') }}</span>
+                  </template>
+                  <span v-else class="ball ball-blue ball-tiny">{{ String(combo.blue).padStart(2, '0') }}</span>
+                </div>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
+
       <!-- ---- 今日开奖结果对比 ---- -->
       <div v-if="result" class="result-box">
         <div class="result-header">
@@ -254,6 +338,9 @@
         </div>
       </div>
 
+      <!-- ===== 新增：被剔除预测明细（可折叠） ===== -->
+      <!-- 相似度剔除功能已移除：所有预测全部保留，不再做历史相似度剔除 -->
+
       <!-- ---- 号码频率分析 ---- -->
       <div v-if="frequency && frequency.total_count > 0" class="frequency-box">
         <div class="frequency-header">
@@ -262,10 +349,10 @@
           <el-tag type="info" size="small" round>基于 {{ frequency.total_count }} 条预测记录</el-tag>
         </div>
 
-        <!-- 分析结论 -->
+        <!-- 分析结论（动态） -->
         <div class="conclusion-box">
           <div class="conclusion-header">📈 分析结论</div>
-          <el-table :data="conclusionData" border stripe size="small" style="width:100%;">
+          <el-table :data="dynamicConclusionData" border stripe size="small" style="width:100%;">
             <el-table-column prop="conclusion" label="结论" min-width="180" />
             <el-table-column prop="detail" label="说明" />
           </el-table>
@@ -338,7 +425,7 @@
         </el-empty>
       </div>
 
-      <!-- ---- 预测记录列表（带分页） ---- -->
+      <!-- ---- 预测记录列表（新增 all_table_id 列） ---- -->
       <el-card v-if="forecasts.length > 0" class="list-card" shadow="hover">
         <template #header>
           <div class="list-header">
@@ -347,7 +434,6 @@
           </div>
         </template>
 
-        <!-- 表格 -->
         <el-table
           :data="paginatedForecasts"
           border
@@ -387,9 +473,39 @@
           </el-table-column>
           <el-table-column prop="create_time" label="预测时间" width="180" />
           <el-table-column prop="model_version" label="模型版本" width="140" show-overflow-tooltip />
+          <!-- 历史相似度 -->
+          <el-table-column label="历史相似度" width="180" align="center">
+            <template #default="{ row }">
+              <div v-if="row.max_similarity != null" style="display:flex; align-items:center; gap:6px;">
+                <el-progress
+                  :percentage="Math.round(row.max_similarity * 100)"
+                  :color="simBarColor(row.max_similarity)"
+                  :stroke-width="6"
+                  style="width:100px;"
+                  :show-text="false"
+                />
+                <span :style="{ color: simTextColor(row.max_similarity), fontSize: '12px', fontWeight: 600 }">
+                  {{ (row.max_similarity * 100).toFixed(1) }}%
+                </span>
+              </div>
+              <span v-else style="color:#c0c4cc;">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="matched_history_issue" label="匹配期号" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.matched_history_issue" size="small" type="info">{{ row.matched_history_issue }}</el-tag>
+              <span v-else style="color:#c0c4cc;">-</span>
+            </template>
+          </el-table-column>
+          <!-- 新增：全组合表 ID（未导入全组合表时隐藏整列） -->
+          <el-table-column v-if="hasAllTableIds" prop="all_table_id" label="全组合ID" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.all_table_id" size="small" type="info">{{ row.all_table_id }}</el-tag>
+              <span v-else style="color:#c0c4cc;">-</span>
+            </template>
+          </el-table-column>
         </el-table>
 
-        <!-- 分页 -->
         <div class="pagination-wrapper">
           <el-pagination
             v-model:current-page="currentPage"
@@ -408,10 +524,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getTodayAnalysis } from '@/api/analysis'
-import { Refresh, Loading } from '@element-plus/icons-vue'
+import { getTodayAnalysis, getFushiList } from '@/api/analysis'
+import { Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -424,19 +540,26 @@ const total = ref(0)
 const upcoming = ref(null)
 const lotteryInfo = ref(null)
 const frequency = ref(null)
+// 全组合表是否已导入（空表时隐藏全组合ID列）
+const hasAllTableIds = ref(false)
+// 相似度阈值（仅用于列表相似度条着色，不再做剔除）
+const similarityThresholdValue = ref(0.4)
 
-// ---- 分页状态 ----
+// 复试分析
+const fushiPlans = ref([])       // 四档方案 [{pattern, red_pool, blue_pool, bet_count, ...}]
+const fushiDate = ref('')        // 当前方案对应的 forecast_date
+const expandedCombo = ref('')    // 展开某档的全部注
+
+// 分页
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-// ---- 分页后的预测记录 ----
 const paginatedForecasts = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   return forecasts.value.slice(start, end)
 })
 
-// ---- 质量评分范围 ----
 const qualityScoreRange = computed(() => {
   if (!frequency.value || frequency.value.total_count === 0) return '-'
   const scores = forecasts.value.map(f => f.quality_score || 0)
@@ -445,25 +568,50 @@ const qualityScoreRange = computed(() => {
   return `${min.toFixed(3)} - ${max.toFixed(3)}`
 })
 
-// ---- 分析结论数据 ----
-const conclusionData = computed(() => {
+// ---- 动态分析结论 ----
+const dynamicConclusionData = computed(() => {
   if (!frequency.value || frequency.value.total_count === 0) return []
   const redTop = frequency.value.red_top || []
   const blueTop = frequency.value.blue_top || []
-  const conclusions = [
-    { conclusion: '🔴 红球 01 极热', detail: `出现率 ${redTop.find(r => r.number === 1)?.rate || 0}%，远高于其他号码` },
-    { conclusion: '🔴 红球 17、15、23、27 稳定', detail: `出现率均超过 20%` },
-    { conclusion: '🔵 蓝球 01 超热', detail: `出现率 ${blueTop.find(b => b.number === 1)?.rate || 0}%，蓝球首选` },
-    { conclusion: '🔵 蓝球 07 次热', detail: `出现率 ${blueTop.find(b => b.number === 7)?.rate || 0}%，蓝球次选` },
-    { conclusion: '📊 质量评分范围', detail: qualityScoreRange.value }
-  ]
+  const conclusions = []
+  if (redTop.length > 0) {
+    const top = redTop[0]
+    conclusions.push({
+      conclusion: `🔴 红球 ${String(top.number).padStart(2,'0')} 极热`,
+      detail: `出现率 ${top.rate}%，远高于其他号码`
+    })
+  }
+  const stable = redTop.filter(item => item.rate >= 20)
+  if (stable.length >= 3) {
+    const nums = stable.slice(0,3).map(i => String(i.number).padStart(2,'0')).join('、')
+    conclusions.push({
+      conclusion: `🔴 红球 ${nums} 稳定`,
+      detail: `出现率均超过 20%`
+    })
+  }
+  if (blueTop.length > 0) {
+    const top = blueTop[0]
+    conclusions.push({
+      conclusion: `🔵 蓝球 ${String(top.number).padStart(2,'0')} 超热`,
+      detail: `出现率 ${top.rate}%，蓝球首选`
+    })
+  }
+  if (blueTop.length > 1) {
+    const second = blueTop[1]
+    conclusions.push({
+      conclusion: `🔵 蓝球 ${String(second.number).padStart(2,'0')} 次热`,
+      detail: `出现率 ${second.rate}%，蓝球次选`
+    })
+  }
+  conclusions.push({
+    conclusion: '📊 质量评分范围',
+    detail: qualityScoreRange.value
+  })
   return conclusions
 })
 
-// 跳转预测页面
 const goToPredict = () => { router.push('/predict') }
 
-// 匹配数量
 const matchCount = computed(() => {
   if (!recommendation.value || !result.value) return { red: 0, blue: 0 }
   const recRed = recommendation.value.red || []
@@ -486,14 +634,12 @@ const matchCount = computed(() => {
   return { red: redMatch, blue: blueMatch }
 })
 
-// 命中率
 const matchRate = computed(() => {
   const total = 7
   const matched = matchCount.value.red + matchCount.value.blue
   return Math.round((matched / total) * 100)
 })
 
-// 置信度颜色
 const confidenceColor = computed(() => {
   const pct = (recommendation.value?.confidence || 0) * 100
   if (pct >= 70) return '#67C23A'
@@ -501,7 +647,6 @@ const confidenceColor = computed(() => {
   return '#909399'
 })
 
-// 获取评分颜色
 const getScoreColor = (score) => {
   const pct = score * 100
   if (pct >= 70) return '#67C23A'
@@ -509,7 +654,6 @@ const getScoreColor = (score) => {
   return '#909399'
 }
 
-// 获取条形图颜色
 const getBarColor = (rate) => {
   if (rate >= 30) return '#f56c6c'
   if (rate >= 20) return '#e6a23c'
@@ -585,7 +729,7 @@ const getCombination = (type) => {
   return { red, blue, score: '-' }
 }
 
-// 获取数据
+// ---- 获取数据 ----
 const fetchData = async () => {
   loading.value = true
   try {
@@ -597,9 +741,13 @@ const fetchData = async () => {
     upcoming.value = res.upcoming
     lotteryInfo.value = res.lottery_info
     frequency.value = res.frequency
-    // 重置分页到第一页
+    hasAllTableIds.value = !!res.has_all_table_ids
+    similarityThresholdValue.value = res.similarity_threshold_value || 0.4
     currentPage.value = 1
     if (res.message) ElMessage.info(res.message)
+
+    // 同时加载已有的复试方案（拿最新一期）
+    await _loadLatestFushi()
   } catch (e) {
     console.error('加载分析数据失败:', e)
     ElMessage.error('加载数据失败：' + (e.message || '未知错误'))
@@ -608,11 +756,43 @@ const fetchData = async () => {
   }
 }
 
-// ---- 分页事件 ----
-const onPageChange = (page) => {
-  currentPage.value = page
+// ---- 复试相关 ----
+
+const _loadLatestFushi = async () => {
+  try {
+    const res = await getFushiList(lotteryType.value, null, 3)
+    if (res.items && res.items.length > 0) {
+      const first = res.items[0]   // 最新一期
+      fushiDate.value = first.forecast_date
+      fushiPlans.value = first.patterns || []
+    } else {
+      fushiPlans.value = []
+      fushiDate.value = ''
+    }
+  } catch (e) {
+    console.warn('加载复试列表失败（忽略）:', e?.message)
+  }
 }
 
+const toggleCombo = (plan) => {
+  expandedCombo.value = expandedCombo.value === plan.pattern ? '' : plan.pattern
+}
+
+// 预测列表相似度颜色（基于动态阈值）
+const simBarColor = (sim) => {
+  const t = similarityThresholdValue.value
+  if (sim >= t) return '#f56c6c'
+  if (sim >= t * 0.8) return '#e6a23c'
+  return '#67C23A'
+}
+const simTextColor = (sim) => {
+  const t = similarityThresholdValue.value
+  if (sim >= t) return '#f56c6c'
+  if (sim >= t * 0.8) return '#e6a23c'
+  return '#67C23A'
+}
+
+const onPageChange = (page) => { currentPage.value = page }
 const onPageSizeChange = (size) => {
   pageSize.value = size
   currentPage.value = 1
@@ -875,6 +1055,7 @@ onMounted(fetchData)
   margin-bottom: 16px;
   border: 1px solid #ebeef5;
 }
+
 .frequency-header {
   display: flex;
   align-items: center;
@@ -953,6 +1134,105 @@ onMounted(fetchData)
 }
 .pagination-wrapper :deep(.el-pagination) {
   padding: 0;
+}
+
+/* 复试分析卡片 */
+.fushi-box {
+  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
+  padding: 18px 22px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border-left: 4px solid #1890ff;
+}
+.fushi-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.fushi-icon { font-size: 18px; }
+.fushi-title { font-size: 17px; font-weight: 600; color: #303133; }
+
+.fushi-plan {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 10px;
+  padding: 12px 14px;
+  height: 100%;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+.fushi-plan:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.plan-pattern {
+  font-weight: 700;
+  font-size: 18px;
+  color: #1890ff;
+  background: #e6f7ff;
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+.plan-pool { margin-bottom: 8px; }
+.pool-label {
+  font-size: 12px;
+  color: #606266;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+.pool-balls { display: flex; flex-wrap: wrap; gap: 3px; }
+
+.plan-stats {
+  display: flex;
+  justify-content: space-around;
+  margin: 10px 0;
+  padding: 8px 0;
+  border-top: 1px dashed #e8e8e8;
+  border-bottom: 1px dashed #e8e8e8;
+}
+.stat-item { text-align: center; }
+.stat-label { font-size: 11px; color: #909399; display: block; }
+.stat-value { font-size: 16px; font-weight: 700; color: #f56c6c; }
+
+.combo-list {
+  margin-top: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  border: 1px solid #ebeef5;
+}
+.combo-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  font-size: 12px;
+  border-bottom: 1px dashed #ebeef5;
+}
+.combo-item:last-child { border-bottom: none; }
+.combo-num {
+  color: #909399;
+  width: 28px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.combo-plus {
+  color: #c0c4cc;
+  font-weight: 700;
+  margin: 0 2px;
 }
 
 /* 响应式 */

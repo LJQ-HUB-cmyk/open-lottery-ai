@@ -55,3 +55,31 @@ export function getLatestDLT() {
     method: 'get'
   })
 }
+
+/**
+ * 历史开奖自相似度分析
+ * @param {string} lotteryType - 彩种：ssq 或 dlt
+ * @param {number} limit - 参与分析的最近 N 期（默认 500）
+ * @returns {Promise} 返回 { items, summary, total, analyzed }
+ */
+export function getHistorySimilarity(lotteryType, limit = 500) {
+  return request({
+    url: `/data/similarity/${lotteryType}`,
+    method: 'get',
+    params: { limit }
+  })
+}
+
+/**
+ * 走势图统计：号码频率、当前遗漏、和值/跨度走势、冷热号
+ * @param {string} lotteryType - 彩种：ssq 或 dlt
+ * @param {number} periods - 统计窗口：最近 N 期（默认 100）
+ * @returns {Promise} 返回 { red, blue, trend, summary, ... }
+ */
+export function getTrendData(lotteryType, periods = 100) {
+  return request({
+    url: `/data/trend/${lotteryType}`,
+    method: 'get',
+    params: { periods }
+  })
+}

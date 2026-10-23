@@ -1,12 +1,13 @@
-import pymysql
 from itertools import combinations
+
+import pymysql
 
 # 数据库连接
 conn = pymysql.connect(
-    host='192.168.2.10',
+    host='127.0.0.1',
     user='root',
     password='123456',
-    database='open-lottery',
+    database='openun-lottery',
     charset='utf8mb4'
 )
 cursor = conn.cursor()
@@ -19,7 +20,7 @@ red_balls = list(range(1, 34))
 blue_balls = list(range(1, 17))
 
 batch = []
-batch_size = 10000
+batch_size = 50000
 total = 0
 
 # 遍历所有红球组合
@@ -33,7 +34,7 @@ for red_combo in combinations(red_balls, 6):
         # 批量插入
         if len(batch) >= batch_size:
             cursor.executemany(
-                "INSERT INTO ssq (red_one, red_two, red_three, red_four, red_five, red_six, blue_one) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "INSERT INTO ssq_all (red_one, red_two, red_three, red_four, red_five, red_six, blue_one) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 batch
             )
             conn.commit()
@@ -43,7 +44,7 @@ for red_combo in combinations(red_balls, 6):
 # 插入剩余数据
 if batch:
     cursor.executemany(
-        "INSERT INTO ssq (red_one, red_two, red_three, red_four, red_five, red_six, blue_one) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        "INSERT INTO ssq_all (red_one, red_two, red_three, red_four, red_five, red_six, blue_one) VALUES (%s, %s, %s, %s, %s, %s, %s)",
         batch
     )
     conn.commit()

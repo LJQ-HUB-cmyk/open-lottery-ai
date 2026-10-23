@@ -2,8 +2,8 @@
  * 数据状态管理（Pinia Store）
  * 管理双色球和大乐透的列表数据及最新数据
  */
-import { defineStore } from 'pinia'
-import { listSSQData, getLatestSSQ, listDLTData, getLatestDLT } from '@/api/data'
+import {defineStore} from 'pinia'
+import {getLatestDLT, getLatestSSQ, listDLTData, listSSQData} from '@/api/data'
 
 export const useDataStore = defineStore('data', {
   state: () => ({

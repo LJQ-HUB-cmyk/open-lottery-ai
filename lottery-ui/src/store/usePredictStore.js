@@ -2,8 +2,8 @@
  * 预测状态管理（Pinia Store）
  * 管理预测结果和错误信息
  */
-import { defineStore } from 'pinia'
-import { getPrediction } from '@/api/predict'
+import {defineStore} from 'pinia'
+import {getPrediction} from '@/api/predict'
 
 export const usePredictStore = defineStore('predict', {
   state: () => ({

@@ -2,8 +2,8 @@
  * 应用入口文件
  * 初始化 Vue 应用，注册全局插件（Pinia、Vue Router、Element Plus）
  */
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
+import {createApp} from 'vue'
+import {createPinia} from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'

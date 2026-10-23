@@ -2,7 +2,7 @@
  * Vue Router 配置
  * 定义路由映射和页面懒加载
  */
-import { createRouter, createWebHistory } from 'vue-router'
+import {createRouter, createWebHistory} from 'vue-router'
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -17,8 +17,8 @@ const routes = [
     meta: { title: '数据管理' }
   },
   {
-    path: '/train',
-    component: () => import('@/views/train/index.vue'),
+    path: '/training',
+    component: () => import('@/views/training/index.vue'),
     meta: { title: '模型训练' }
   },
   {
@@ -27,9 +27,19 @@ const routes = [
     meta: { title: '预测结果' }
   },
   {
-  path: '/analysis',
-  component: () => import('@/views/analysis/index.vue'),
-  meta: { title: '预测分析' }
+    path: '/analysis',
+    component: () => import('@/views/analysis/index.vue'),
+    meta: { title: '预测分析' }
+  },
+  {
+    path: '/diagnostic',
+    component: () => import('@/views/diagnostic/index.vue'),
+    meta: { title: '真实性诊断' }
+  },
+  {
+    path: '/hit-analysis',
+    component: () => import('@/views/hit-analysis/index.vue'),
+    meta: { title: '数据分析' }
   }
 ]
 

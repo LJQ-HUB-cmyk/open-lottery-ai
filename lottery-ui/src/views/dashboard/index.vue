@@ -180,11 +180,11 @@
  * 仪表盘页面
  * 显示最新开奖数据和已训练模型
  */
-import { ref, computed, onMounted } from 'vue'
-import { getLatestSSQ, getLatestDLT } from '@/api/data'
-import { listModels, downloadModel } from '@/api/model'
-import { Document } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import {computed, onMounted, ref} from 'vue'
+import {getLatestDLT, getLatestSSQ} from '@/api/data'
+import {downloadModel, listModels} from '@/api/model'
+import {Document} from '@element-plus/icons-vue'
+import {ElMessage} from 'element-plus'
 
 // ----- 最新开奖数据 -----
 const latestSSQ = ref(null)

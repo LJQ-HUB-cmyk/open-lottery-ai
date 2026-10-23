@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
+import asyncio
+from typing import Optional, List
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List
-from app.services.agent_service import AgentService
+
 from app.core.config import settings
+from app.services.agent_service import AgentService
 
 router = APIRouter(prefix="/agent", tags=["AI Agent"])
 
@@ -26,7 +29,10 @@ async def recommend_hyperparams(req: HyperparamsRecommendRequest):
     if not settings.AGENT_ENABLED:
         raise HTTPException(403, "Agent 功能未启用")
     try:
-        result = AgentService.recommend_hyperparams(req.lottery_type, req.description)
+        # 大模型/嵌入调用为同步阻塞 IO，丢线程池避免卡死 FastAPI 事件循环
+        result = await asyncio.to_thread(
+            AgentService.recommend_hyperparams, req.lottery_type, req.description
+        )
         reason = result.pop("reason", None)
         return HyperparamsRecommendResponse(**result, reason=reason)
     except ValueError as e:
@@ -39,7 +45,7 @@ async def recommend_models(lottery_type: str):
     if not settings.AGENT_ENABLED:
         raise HTTPException(403, "Agent 功能未启用")
     try:
-        models = AgentService.recommend_models(lottery_type)
+        models = await asyncio.to_thread(AgentService.recommend_models, lottery_type)
         return ModelsRecommendResponse(models=models)
     except Exception as e:
         raise HTTPException(500, f"推荐模型失败: {str(e)}")

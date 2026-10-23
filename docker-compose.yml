@@ -6,7 +6,7 @@ services:
     container_name: lottery-mysql
     environment:
       MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: open-lottery
+      MYSQL_DATABASE: openun-lottery
     ports:
       - "3306:3306"
     volumes:

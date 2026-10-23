@@ -4,7 +4,6 @@
 功能：增量获取最新数据，计算分析字段，写入 ssq_history 表
 """
 import sys
-import os
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径

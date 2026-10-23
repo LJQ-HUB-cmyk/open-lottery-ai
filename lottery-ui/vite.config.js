@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
+import {defineConfig} from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath, URL } from 'node:url'   // 👈 新增
+import {fileURLToPath, URL} from 'node:url' // 👈 新增
 
 // Vite 配置
 export default defineConfig({

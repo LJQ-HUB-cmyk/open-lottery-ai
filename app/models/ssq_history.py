@@ -3,7 +3,9 @@
 双色球历史开奖结果表 (ssq_history) 的 ORM 模型。
 """
 from sqlalchemy import Column, BigInteger, String, Date, Integer, DECIMAL, DateTime, func
+
 from app.core.database import Base
+
 
 class SSQHistory(Base):
     __tablename__ = "ssq_history"

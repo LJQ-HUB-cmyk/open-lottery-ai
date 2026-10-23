@@ -2,9 +2,11 @@
 """
 API 请求与响应的 Pydantic 模型定义。
 """
-from pydantic import BaseModel
 from datetime import date
 from typing import Optional, List
+
+from pydantic import BaseModel
+
 
 # ---------- 基础响应 ----------
 class SSQHistoryResponse(BaseModel):
@@ -52,6 +54,15 @@ class TrainRequest(BaseModel):
     seq_len: int = 30
     learning_rate: float = 1e-4
     with_fetch: bool = True
+    seed: Optional[int] = None         # 随机种子，None 时由 trainer 用时间戳自动生成
+    auto_params: bool = False          # True 时从高命中率模型超参区间采样 epochs/batch_size/learning_rate
+
+# ---------- 自我进化请求 ----------
+class EvolveRequest(BaseModel):
+    """自我进化闭环手动触发请求"""
+    lottery_type: str = "ssq"          # 'ssq' 或 'dlt'
+    n_models: Optional[int] = None     # 本轮训练模型数，None 时取配置 SELF_EVOLVE_N_MODELS
+    force: bool = False                # True 时忽略「无新数据」闸门，强制跑一轮
 
 class TrainResponse(BaseModel):
     """训练任务响应"""
@@ -74,3 +85,9 @@ class PredictResponse(BaseModel):
     blue: List[int]
     quality_score: Optional[float] = None
     model_version: str = "Transformer"
+
+
+class BatchPredictRequest(BaseModel):
+    """批量预测请求：一次提交多个模型文件名，后端并行推理"""
+    models: List[str] = []
+    max_workers: Optional[int] = 16
